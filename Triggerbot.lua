@@ -1,3 +1,9 @@
+game:GetService("StarterGui"):SetCore("SendNotification", {
+	Title = "Notification",
+	Text = "made by /azuremodded",
+	Duration = 5
+})
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -313,3 +319,4 @@ if player.Character then
 	setupCharacter(player.Character)
 	task.spawn(scanAllToolsSafely)
 end
+
