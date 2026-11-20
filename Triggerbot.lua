@@ -320,6 +320,9 @@ if player.Character then
 	task.spawn(scanAllToolsSafely)
 end
 
+Replace the previous ESP block with this version. It draws the username directly on the screen above the gray box:
+
+```lua
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -328,14 +331,16 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local oldFolder = playerGui:FindFirstChild("AzureESP")
-if oldFolder then
-	oldFolder:Destroy()
+local oldGui = playerGui:FindFirstChild("AzureESP")
+if oldGui then
+	oldGui:Destroy()
 end
 
-local folder = Instance.new("Folder")
-folder.Name = "AzureESP"
-folder.Parent = playerGui
+local gui = Instance.new("ScreenGui")
+gui.Name = "AzureESP"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = playerGui
 
 local enabled = false
 local entries = {}
@@ -343,35 +348,16 @@ local entries = {}
 local function removeESP(target)
 	local entry = entries[target]
 	if entry then
-		entry.gui:Destroy()
+		entry.box:Destroy()
+		entry.label:Destroy()
 		entries[target] = nil
 	end
 end
 
-local function createLabel(parent, y)
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Position = UDim2.new(0, -50, 0, y)
-	label.Size = UDim2.new(1, 100, 0, 18)
-	label.Font = Enum.Font.SourceSansBold
-	label.TextSize = 16
-	label.TextColor3 = Color3.new(1, 1, 1)
-	label.TextStrokeTransparency = 0
-	label.Parent = parent
-	return label
-end
-
-local function createESP(target, character, root)
-	local gui = Instance.new("BillboardGui")
-	gui.Name = target.Name
-	gui.Adornee = root
-	gui.Size = UDim2.new(4, 0, 5.5, 0)
-	gui.AlwaysOnTop = true
-	gui.Parent = folder
-
+local function createESP(target)
 	local box = Instance.new("Frame")
 	box.BackgroundTransparency = 1
-	box.Size = UDim2.fromScale(1, 1)
+	box.Visible = false
 	box.Parent = gui
 
 	local stroke = Instance.new("UIStroke")
@@ -379,19 +365,19 @@ local function createESP(target, character, root)
 	stroke.Thickness = 2
 	stroke.Parent = box
 
-	local nameLabel = createLabel(box, -20)
-	nameLabel.Text = target.Name
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromOffset(200, 54)
+	label.Font = Enum.Font.SourceSansBold
+	label.TextSize = 16
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = 0
+	label.TextYAlignment = Enum.TextYAlignment.Bottom
+	label.Visible = false
+	label.Parent = gui
 
-	local healthLabel = createLabel(box, -38)
-	local distanceLabel = createLabel(box, -56)
-
-	entries[target] = {
-		gui = gui,
-		character = character,
-		root = root,
-		health = healthLabel,
-		distance = distanceLabel
-	}
+	entries[target] = {box = box, label = label}
+	return entries[target]
 end
 
 ContextActionService:BindActionAtPriority(
@@ -400,14 +386,12 @@ ContextActionService:BindActionAtPriority(
 		if inputState == Enum.UserInputState.Begin
 			and not UserInputService:GetFocusedTextBox() then
 			enabled = not enabled
-
 			if not enabled then
 				for target in pairs(entries) do
 					removeESP(target)
 				end
 			end
 		end
-
 		return Enum.ContextActionResult.Pass
 	end,
 	false,
@@ -425,34 +409,53 @@ RunService:BindToRenderStep("AzureESP_Update", Enum.RenderPriority.Last.Value, f
 		end
 	end
 
-	local localCharacter = player.Character
-	local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+	local camera = workspace.CurrentCamera
+	if not camera then return end
+
+	local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 
 	for _, target in ipairs(Players:GetPlayers()) do
 		if target ~= player then
 			local character = target.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			local entry = entries[target]
 
 			if not root or not humanoid or humanoid.Health <= 0 then
 				removeESP(target)
 			else
-				if not entry or entry.character ~= character or entry.root ~= root then
-					removeESP(target)
-					createESP(target, character, root)
-					entry = entries[target]
+				local entry = entries[target] or createESP(target)
+				local center, onScreen = camera:WorldToViewportPoint(root.Position)
+				local top = camera:WorldToViewportPoint(root.Position + camera.CFrame.UpVector * 3)
+				local bottom = camera:WorldToViewportPoint(root.Position - camera.CFrame.UpVector * 3)
+				local left = camera:WorldToViewportPoint(root.Position - camera.CFrame.RightVector * 2)
+				local right = camera:WorldToViewportPoint(root.Position + camera.CFrame.RightVector * 2)
+
+				local visible = onScreen and center.Z > 0
+				entry.box.Visible = visible
+				entry.label.Visible = visible
+
+				if visible then
+					local width = math.abs(right.X - left.X)
+					local height = math.abs(bottom.Y - top.Y)
+					local x = center.X - width / 2
+					local y = center.Y - height / 2
+
+					entry.box.Position = UDim2.fromOffset(x, y)
+					entry.box.Size = UDim2.fromOffset(width, height)
+					entry.label.Position = UDim2.fromOffset(center.X - 100, math.max(0, y - 54))
+
+					local distance = localRoot
+						and string.format("%d studs", math.floor((localRoot.Position - root.Position).Magnitude))
+						or "Distance: --"
+
+					entry.label.Text = string.format(
+						"%s\nHealth: %d / %d\n%s",
+						target.Name,
+						math.ceil(humanoid.Health),
+						math.ceil(humanoid.MaxHealth),
+						distance
+					)
 				end
-
-				entry.health.Text = string.format(
-					"Health: %d / %d",
-					math.ceil(humanoid.Health),
-					math.ceil(humanoid.MaxHealth)
-				)
-
-				entry.distance.Text = localRoot
-					and string.format("%d studs", math.floor((localRoot.Position - root.Position).Magnitude))
-					or "Distance: --"
 			end
 		end
 	end
