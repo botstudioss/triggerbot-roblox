@@ -1,77 +1,315 @@
--- Check if the script is already loaded
-if getgenv().triggerbotLoaded then
-    print("Triggerbot is already loaded.")
-    return
-end
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
 
--- Mark the script as loaded
-getgenv().triggerbotLoaded = true
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
 
--- Define the triggerbot table
-getgenv().triggerbot = {
-    Settings = {
-        isEnabled = false,  -- Determines if clicking is enabled
-        clickDelay = 0,   -- Time in seconds to wait before clicking
-        toggleKey = Enum.KeyCode.T,  -- Key to toggle the clicking on and off
-        lastClickTime = 0   -- Tracks the last click time
-    },
-    load = function()
-        local Players = game:GetService("Players")
-        local UserInputService = game:GetService("UserInputService")
-        local StarterGui = game:GetService("StarterGui")
-        local LocalPlayer = Players.LocalPlayer
-        local mouse = LocalPlayer:GetMouse()
+local AUTO_SHOOT_ENABLED = true
+local IGNORE_TEAMMATES = false
 
-        -- Function to simulate mouse click
-        local function simulateClick()
-            mouse1click()
-        end
-
-        -- Function to check if the hovered part belongs to another player
-        local function isHoveringPlayer()
-            local target = mouse.Target
-
-            if target then
-                local character = target:FindFirstAncestorOfClass("Model")
-                if character and Players:GetPlayerFromCharacter(character) then
-                    return true
-                end
-            end
-            return false
-        end
-
-        -- Function to create a notification in the bottom right
-        local function createNotification(message)
-            StarterGui:SetCore("SendNotification", {
-                Title = "Triggerbot",
-                Text = message,
-                Duration = 2,  -- Duration in seconds
-            })
-        end
-
-        -- Listen for the toggle key press
-        UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if input.KeyCode == getgenv().triggerbot.Settings.toggleKey and not gameProcessed then
-                getgenv().triggerbot.Settings.isEnabled = not getgenv().triggerbot.Settings.isEnabled
-                local statusMessage = getgenv().triggerbot.Settings.isEnabled and "enabled - stratxgy on github" or "disabled - stratxgy on github"
-                print("Triggerbot is now " .. statusMessage)
-                
-                -- Show notification
-                createNotification("Triggerbot is now " .. statusMessage)
-            end
-        end)
-
-        -- Listen to mouse movement
-        mouse.Move:Connect(function()
-            if getgenv().triggerbot.Settings.isEnabled and isHoveringPlayer() then
-                local currentTime = tick()
-                if currentTime - getgenv().triggerbot.Settings.lastClickTime >= getgenv().triggerbot.Settings.clickDelay then
-                    simulateClick()
-                    getgenv().triggerbot.Settings.lastClickTime = currentTime
-                end
-            end
-        end)
-    end
+local WHITELISTED_TOOLS = {
+	["[Revolver]"] = true,
+	["[Double-Barrel SG]"] = true,
+	["[TacticalShotgun]"] = true
 }
 
+local KICK_MESSAGE = [[No supported tools were found in this experience.
+This script requires at least one compatible weapon tool to function correctly.
 
+Please contact the creator on Discord (@sscr1pted) for assistance.
+
+The creator will resolve this by adding your tool to the supported whitelist.
+
+Make sure to include the game link and a screenshot of this kick message.
+
+No reply = Jerking off (DO NOT DISTURB!)]]
+
+local leftHeld = false
+local mouseDown = false
+local holdStartTime = 0
+local holdThreshold = 0.25
+local lastTarget
+local canShoot = true
+local isCrouching = false
+local autoFired = false
+
+local shotDelays = {0}
+
+local function getEquippedTool()
+	local char = player.Character
+	if char then
+		for _, tool in ipairs(char:GetChildren()) do
+			if tool:IsA("Tool") then
+				return tool
+			end
+		end
+	end
+	return nil
+end
+
+local function isFriendly(targetPlayer)
+	if not targetPlayer then return false end
+	if targetPlayer == player then return true end
+	if IGNORE_TEAMMATES and player.Team and targetPlayer.Team and player.Team == targetPlayer.Team then
+		return true
+	end
+	return false
+end
+
+local function isGun(tool)
+	if not tool or not tool:IsA("Tool") then return false end
+	if WHITELISTED_TOOLS[tool.Name] then return true end
+	for _, child in ipairs(tool:GetChildren()) do
+		if child:IsA("Script") or child:IsA("LocalScript") then
+			if string.match(child.Name:lower(), "gun") then
+				return true
+			end
+		end
+		if child:IsA("RemoteEvent") then
+			return true
+		end
+		if child:IsA("Folder") then
+			for _, sub in ipairs(child:GetDescendants()) do
+				if sub:IsA("RemoteEvent") then
+					return true
+				end
+			end
+		end
+	end
+	local handle = tool:FindFirstChild("Handle")
+	if handle then
+		for _, sound in ipairs(handle:GetDescendants()) do
+			if sound:IsA("Sound") and string.match(sound.Name:lower(), "shoot") then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function scanAllToolsSafely()
+	local allObjects = {}
+	for _, service in ipairs(game:GetChildren()) do
+		table.insert(allObjects, service)
+	end
+	local index = 1
+	local batchSize = 20
+	local found = false
+
+	local function scanBatch()
+		local processed = 0
+		while index <= #allObjects and processed < batchSize do
+			local obj = allObjects[index]
+			index = index + 1
+			processed = processed + 1
+			if obj:IsA("Tool") and isGun(obj) then
+				found = true
+				return
+			end
+			for _, child in ipairs(obj:GetChildren()) do
+				table.insert(allObjects, child)
+			end
+		end
+		if not found and index <= #allObjects then
+			RunService.Heartbeat:Wait()
+			task.spawn(scanBatch)
+		elseif not found then
+			player:Kick(KICK_MESSAGE)
+		end
+	end
+
+	task.spawn(scanBatch)
+end
+
+local function attemptLocalFire()
+	if not AUTO_SHOOT_ENABLED or isCrouching then return false end
+	local tool = getEquippedTool()
+	if tool and isGun(tool) and canShoot then
+		canShoot = false
+		autoFired = true
+		pcall(function()
+			tool:Activate()
+			if tool:IsA("Tool") and tool:FindFirstChildOfClass("RemoteEvent") == nil then
+				if tool:FindFirstChild("Handle") then
+					task.wait(0.01)
+					tool:Deactivate()
+				else
+					tool:Deactivate()
+				end
+			else
+				tool:Deactivate()
+			end
+		end)
+		local delayTime = shotDelays[math.random(1, #shotDelays)]
+		task.delay(delayTime, function()
+			canShoot = true
+		end)
+		return true
+	end
+	return false
+end
+
+local function isRagdolled(model)
+	if not model or not model:IsA("Model") then return true end
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return true end
+	if humanoid.Health <= 0 then return true end
+	local ok, state = pcall(function() return humanoid:GetState() end)
+	if ok and (state == Enum.HumanoidStateType.Physics or state == Enum.HumanoidStateType.Dead or state == Enum.HumanoidStateType.FallingDown) then
+		return true
+	end
+	if humanoid.PlatformStand == true then return true end
+	local possibleFlagNames = {"Ragdolled","Ragdoll","IsRagdolled","RagdollFlag","RagdollState"}
+	for _, name in ipairs(possibleFlagNames) do
+		local v = model:FindFirstChild(name)
+		if v then
+			if v:IsA("BoolValue") and v.Value == true then
+				return true
+			elseif v:IsA("StringValue") and (v.Value == "true" or v.Value == "ragdolled") then
+				return true
+			end
+		end
+	end
+	local foundMotor6D = false
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Motor6D") then
+			foundMotor6D = true
+			break
+		end
+	end
+	if not foundMotor6D then
+		return true
+	end
+	return false
+end
+
+local function isValidTarget(instance)
+	if not instance then return false end
+	local model = instance:FindFirstAncestorOfClass("Model")
+	if not model then return false end
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return false end
+	local targetPlayer = Players:GetPlayerFromCharacter(model)
+	if not targetPlayer or isFriendly(targetPlayer) then return false end
+	if isRagdolled(model) then return false end
+	return true
+end
+
+local function handleMouseMovement()
+	if not leftHeld or isCrouching then return end
+	local tool = getEquippedTool()
+	if not tool or not isGun(tool) then
+		leftHeld = false
+		lastTarget = nil
+		return
+	end
+	local origin = workspace.CurrentCamera.CFrame.Position
+	local direction = (mouse.Hit.Position - origin).Unit * 1000
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	params.FilterDescendantsInstances = { player.Character }
+	local result = workspace:Raycast(origin, direction, params)
+	if result and isValidTarget(result.Instance) then
+		local distance = (result.Position - origin).Magnitude
+		if tool.Name:lower():find("revolver") and distance > 200 then
+			lastTarget = nil
+			return
+		elseif tool.Name:lower():find("double-barrel") or tool.Name:lower():find("shotgun") and distance > 75 then
+			lastTarget = nil
+			return
+		end
+		if result.Instance ~= lastTarget then
+			lastTarget = result.Instance
+			attemptLocalFire()
+		elseif canShoot then
+			attemptLocalFire()
+		end
+	else
+		lastTarget = nil
+	end
+end
+
+local function blockLeftClick(actionName, inputState)
+	local tool = getEquippedTool()
+	local gunEquipped = tool and isGun(tool)
+
+	if inputState == Enum.UserInputState.Begin then
+		mouseDown = true
+		holdStartTime = tick()
+		autoFired = false
+		if gunEquipped and not isCrouching then
+			leftHeld = true
+			return Enum.ContextActionResult.Sink
+		end
+	elseif inputState == Enum.UserInputState.End then
+		mouseDown = false
+		leftHeld = false
+		lastTarget = nil
+		local heldTime = tick() - holdStartTime
+		if gunEquipped and heldTime < holdThreshold and not isCrouching and not autoFired then
+			attemptLocalFire()
+			return Enum.ContextActionResult.Sink
+		end
+	end
+	return Enum.ContextActionResult.Pass
+end
+
+ContextActionService:BindAction("BlockMouseClick", blockLeftClick, false, Enum.UserInputType.MouseButton1)
+
+UserInputService.InputChanged:Connect(function(input, gp)
+	if gp then return end
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		handleMouseMovement()
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if leftHeld and not isCrouching then
+		handleMouseMovement()
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+		isCrouching = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+		isCrouching = false
+		if mouseDown then
+			leftHeld = true
+		end
+	end
+end)
+
+local function setupCharacter(char)
+	char.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and isGun(child) then
+			if mouseDown and not isCrouching then
+				leftHeld = true
+			end
+		end
+	end)
+	char.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then
+			lastTarget = nil
+			canShoot = true
+		end
+	end)
+end
+
+player.CharacterAdded:Connect(function(char)
+	setupCharacter(char)
+	task.spawn(scanAllToolsSafely)
+end)
+
+if player.Character then
+	setupCharacter(player.Character)
+	task.spawn(scanAllToolsSafely)
+end
