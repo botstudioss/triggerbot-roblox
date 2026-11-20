@@ -24,7 +24,7 @@ local WHITELISTED_TOOLS = {
 local KICK_MESSAGE = [[No supported tools were found in this experience.
 This script requires at least one compatible weapon tool to function correctly.
 
-Please contact the creator on Discord (@sscr1pted) for assistance.
+Please contact the creator on Discord (@socialdw) for assistance.
 
 The creator will resolve this by adding your tool to the supported whitelist.
 
@@ -320,22 +320,38 @@ if player.Character then
 	task.spawn(scanAllToolsSafely)
 end
 
-local espEnabled = false
-local espObjects = {}
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local function removeESP(targetPlayer)
-	local esp = espObjects[targetPlayer]
-	if esp then
-		esp.gui:Destroy()
-		espObjects[targetPlayer] = nil
+local oldFolder = playerGui:FindFirstChild("AzureESP")
+if oldFolder then
+	oldFolder:Destroy()
+end
+
+local folder = Instance.new("Folder")
+folder.Name = "AzureESP"
+folder.Parent = playerGui
+
+local enabled = false
+local entries = {}
+
+local function removeESP(target)
+	local entry = entries[target]
+	if entry then
+		entry.gui:Destroy()
+		entries[target] = nil
 	end
 end
 
-local function createLabel(parent, yOffset)
+local function createLabel(parent, y)
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Position = UDim2.new(0, -50, 0, yOffset)
+	label.Position = UDim2.new(0, -50, 0, y)
 	label.Size = UDim2.new(1, 100, 0, 18)
 	label.Font = Enum.Font.SourceSansBold
 	label.TextSize = 16
@@ -345,77 +361,96 @@ local function createLabel(parent, yOffset)
 	return label
 end
 
-local function createESP(targetPlayer, character, root)
+local function createESP(target, character, root)
 	local gui = Instance.new("BillboardGui")
-	gui.Name = "PlayerESP"
+	gui.Name = target.Name
 	gui.Adornee = root
 	gui.Size = UDim2.new(4, 0, 5.5, 0)
 	gui.AlwaysOnTop = true
-	gui.Parent = playerGui
+	gui.Parent = folder
 
 	local box = Instance.new("Frame")
 	box.BackgroundTransparency = 1
 	box.Size = UDim2.fromScale(1, 1)
 	box.Parent = gui
 
-	local outline = Instance.new("UIStroke")
-	outline.Color = Color3.fromRGB(255, 0, 0)
-	outline.Thickness = 2
-	outline.Parent = box
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 0, 0)
+	stroke.Thickness = 2
+	stroke.Parent = box
 
 	local nameLabel = createLabel(box, -20)
-	nameLabel.Text = targetPlayer.Name
+	nameLabel.Text = target.Name
 
 	local healthLabel = createLabel(box, -38)
 	local distanceLabel = createLabel(box, -56)
 
-	espObjects[targetPlayer] = {
+	entries[target] = {
 		gui = gui,
 		character = character,
 		root = root,
-		healthLabel = healthLabel,
-		distanceLabel = distanceLabel
+		health = healthLabel,
+		distance = distanceLabel
 	}
 end
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed or input.KeyCode ~= Enum.KeyCode.T then return end
+ContextActionService:BindActionAtPriority(
+	"AzureESP_Toggle",
+	function(_, inputState)
+		if inputState == Enum.UserInputState.Begin
+			and not UserInputService:GetFocusedTextBox() then
+			enabled = not enabled
 
-	espEnabled = not espEnabled
-	if not espEnabled then
-		for targetPlayer in pairs(espObjects) do
-			removeESP(targetPlayer)
+			if not enabled then
+				for target in pairs(entries) do
+					removeESP(target)
+				end
+			end
+		end
+
+		return Enum.ContextActionResult.Pass
+	end,
+	false,
+	Enum.ContextActionPriority.High.Value + 1,
+	Enum.KeyCode.T
+)
+
+RunService:UnbindFromRenderStep("AzureESP_Update")
+RunService:BindToRenderStep("AzureESP_Update", Enum.RenderPriority.Last.Value, function()
+	if not enabled then return end
+
+	for target in pairs(entries) do
+		if target.Parent ~= Players then
+			removeESP(target)
 		end
 	end
-end)
-
-Players.PlayerRemoving:Connect(removeESP)
-
-RunService.RenderStepped:Connect(function()
-	if not espEnabled then return end
 
 	local localCharacter = player.Character
 	local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
 
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		if targetPlayer ~= player then
-			local character = targetPlayer.Character
+	for _, target in ipairs(Players:GetPlayers()) do
+		if target ~= player then
+			local character = target.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			local esp = espObjects[targetPlayer]
+			local entry = entries[target]
 
 			if not root or not humanoid or humanoid.Health <= 0 then
-				removeESP(targetPlayer)
+				removeESP(target)
 			else
-				if not esp or esp.character ~= character or esp.root ~= root then
-					removeESP(targetPlayer)
-					createESP(targetPlayer, character, root)
-					esp = espObjects[targetPlayer]
+				if not entry or entry.character ~= character or entry.root ~= root then
+					removeESP(target)
+					createESP(target, character, root)
+					entry = entries[target]
 				end
 
-				esp.healthLabel.Text = string.format("Health: %d / %d",
-					math.ceil(humanoid.Health), math.ceil(humanoid.MaxHealth))
-				esp.distanceLabel.Text = localRoot
+				entry.health.Text = string.format(
+					"Health: %d / %d",
+					math.ceil(humanoid.Health),
+					math.ceil(humanoid.MaxHealth)
+				)
+
+				entry.distance.Text = localRoot
 					and string.format("%d studs", math.floor((localRoot.Position - root.Position).Magnitude))
 					or "Distance: --"
 			end
