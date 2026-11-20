@@ -320,9 +320,6 @@ if player.Character then
 	task.spawn(scanAllToolsSafely)
 end
 
-Replace the previous ESP block with this version. It draws the username directly on the screen above the gray box:
-
-```lua
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
