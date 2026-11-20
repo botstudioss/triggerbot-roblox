@@ -320,3 +320,105 @@ if player.Character then
 	task.spawn(scanAllToolsSafely)
 end
 
+local espEnabled = false
+local espObjects = {}
+local playerGui = player:WaitForChild("PlayerGui")
+
+local function removeESP(targetPlayer)
+	local esp = espObjects[targetPlayer]
+	if esp then
+		esp.gui:Destroy()
+		espObjects[targetPlayer] = nil
+	end
+end
+
+local function createLabel(parent, yOffset)
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Position = UDim2.new(0, -50, 0, yOffset)
+	label.Size = UDim2.new(1, 100, 0, 18)
+	label.Font = Enum.Font.SourceSansBold
+	label.TextSize = 16
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = 0
+	label.Parent = parent
+	return label
+end
+
+local function createESP(targetPlayer, character, root)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "PlayerESP"
+	gui.Adornee = root
+	gui.Size = UDim2.new(4, 0, 5.5, 0)
+	gui.AlwaysOnTop = true
+	gui.Parent = playerGui
+
+	local box = Instance.new("Frame")
+	box.BackgroundTransparency = 1
+	box.Size = UDim2.fromScale(1, 1)
+	box.Parent = gui
+
+	local outline = Instance.new("UIStroke")
+	outline.Color = Color3.fromRGB(255, 0, 0)
+	outline.Thickness = 2
+	outline.Parent = box
+
+	local nameLabel = createLabel(box, -20)
+	nameLabel.Text = targetPlayer.Name
+
+	local healthLabel = createLabel(box, -38)
+	local distanceLabel = createLabel(box, -56)
+
+	espObjects[targetPlayer] = {
+		gui = gui,
+		character = character,
+		root = root,
+		healthLabel = healthLabel,
+		distanceLabel = distanceLabel
+	}
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed or input.KeyCode ~= Enum.KeyCode.T then return end
+
+	espEnabled = not espEnabled
+	if not espEnabled then
+		for targetPlayer in pairs(espObjects) do
+			removeESP(targetPlayer)
+		end
+	end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+
+RunService.RenderStepped:Connect(function()
+	if not espEnabled then return end
+
+	local localCharacter = player.Character
+	local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		if targetPlayer ~= player then
+			local character = targetPlayer.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			local esp = espObjects[targetPlayer]
+
+			if not root or not humanoid or humanoid.Health <= 0 then
+				removeESP(targetPlayer)
+			else
+				if not esp or esp.character ~= character or esp.root ~= root then
+					removeESP(targetPlayer)
+					createESP(targetPlayer, character, root)
+					esp = espObjects[targetPlayer]
+				end
+
+				esp.healthLabel.Text = string.format("Health: %d / %d",
+					math.ceil(humanoid.Health), math.ceil(humanoid.MaxHealth))
+				esp.distanceLabel.Text = localRoot
+					and string.format("%d studs", math.floor((localRoot.Position - root.Position).Magnitude))
+					or "Distance: --"
+			end
+		end
+	end
+end)
