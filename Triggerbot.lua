@@ -318,5 +318,4 @@ end)
 if player.Character then
 	setupCharacter(player.Character)
 	task.spawn(scanAllToolsSafely)
-end)
-
+end
