@@ -375,7 +375,7 @@ local function createESP(target, character, root)
 	box.Parent = gui
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 0, 0)
+	stroke.Color = Color3.fromRGB(128, 128, 128)
 	stroke.Thickness = 2
 	stroke.Parent = box
 
