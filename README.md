@@ -6,6 +6,10 @@ With the menu closed, hold left-click over an eligible player to use the
 triggerbot. Revolver shots are limited to 200 studs and shotgun shots to 75
 studs; unsupported weapon or game behavior can still prevent firing.
 
+In **Player > Movement**, set speed from 0 to 200 studs per second and toggle
+it with G by default. The speed key can be rebound in the same section. Games
+may override or reject client-side speed changes.
+
 The **Aim modes** tab adds a separate camera aimbot and experimental Silent Aim.
 Both have independent FOV radii, circles, limits, target parts, team checks and
 wall checks. The camera aimbot uses E by default, supports hold or toggle mode,

@@ -287,6 +287,7 @@ do
 	local showTracers, rainbowESP = false, false
 	local showTargetDot, showTargetTracer, showTargetHighlight, showTargetStats = false, false, false, false
 	local speedEnabled, autoJump, antiVoid, flightEnabled = false, false, false, false
+	local speedAmount = 24
 	local savedHumanoid, savedWalkSpeed, safeCFrame, safeCharacter
 	local cameraFovEnabled, savedCamera, savedCameraFov = false, nil, nil
 	local savedShadows, savedFogStart, savedFogEnd
@@ -294,6 +295,7 @@ do
 	local keys = {
 		Camlock = Enum.KeyCode.Q,
 		ESP = Enum.KeyCode.T,
+		Speed = Enum.KeyCode.G,
 		Menu = Enum.KeyCode.RightShift
 	}
 	local waitingForKey
@@ -531,7 +533,7 @@ do
 	local keySection = makeSection(pageContents.Aimbot, "General & Keybinds", 0, 330)
 	local fovSection = makeSection(pageContents.Aimbot, "Camera Aimbot", 248, 476)
 	local teamSection = makeSection(pageContents.Player, "Player", 0, 185)
-	local visibilitySection = makeSection(pageContents.Player, "Movement", 248, 166)
+	local visibilitySection = makeSection(pageContents.Player, "Movement", 248, 255)
 	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0, 300)
 	local espFilters = makeSection(pageContents.Visuals, "ESP filters", 0, 325, 233)
 	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248, 262)
@@ -923,19 +925,57 @@ do
 	makeToggle(teamSection, 35, "Team check", true, function(value) IGNORE_TEAMMATES = value end)
 	makeLabel(teamSection, "Existing locks stay active behind walls.", 70, 50)
 	makeLabel(teamSection, "Drag target stats while the menu is open.", 125, 50)
-	makeToggle(visibilitySection, 35, "Speed", false, function(value)
+	local function setSpeed(value)
 		speedEnabled = value
 		if not value and savedHumanoid then
 			savedHumanoid.WalkSpeed = savedWalkSpeed
 			savedHumanoid, savedWalkSpeed = nil, nil
 		end
-	end)
+	end
+	local setSpeedToggle = makeToggle(visibilitySection, 35, "Speed", false, setSpeed)
 	makeToggle(visibilitySection, 67, "Auto jump", false, function(value) autoJump = value end)
 	makeToggle(visibilitySection, 99, "Anti void", false, function(value)
 		antiVoid = value
 		safeCFrame, safeCharacter = nil, nil
 	end)
 	makeToggle(visibilitySection, 131, "Flight (WASD, Space, Ctrl)", false, function(value) flightEnabled = value end)
+	local speedLabel = makeLabel(visibilitySection, "Speed amount (0-200)", 158)
+	local speedInput = Instance.new("TextBox")
+	speedInput.Name = "SpeedAmountInput"
+	speedInput.Position = UDim2.fromOffset(8, compact(184))
+	speedInput.Size = UDim2.fromOffset(220, 20)
+	speedInput.BackgroundColor3 = theme.control
+	speedInput.BorderSizePixel = 0
+	speedInput.TextColor3 = theme.text
+	speedInput.ClearTextOnFocus = false
+	speedInput.Text = tostring(speedAmount)
+	speedInput.Font = Enum.Font.Code
+	speedInput.TextSize = 12
+	speedInput.ZIndex = 14
+	speedInput.Parent = visibilitySection
+	decorate(speedInput, 0, theme.border)
+	speedInput.FocusLost:Connect(function()
+		local value = tonumber(speedInput.Text)
+		if not value or value ~= value or value < 0 or value > 200 then
+			speedInput.Text = tostring(speedAmount)
+			speedLabel.Text = "Enter speed from 0 to 200"
+			speedLabel.TextColor3 = Color3.fromRGB(255, 115, 115)
+			return
+		end
+		speedAmount = value
+		speedInput.Text = tostring(value)
+		speedLabel.Text = "Speed amount (0-200)"
+		speedLabel.TextColor3 = theme.muted
+	end)
+	local speedKeyButton = makeButton(visibilitySection, 217)
+	keyButtons.Speed = speedKeyButton
+	speedKeyButton.MouseButton1Click:Connect(function()
+		waitingForKey = "Speed"
+		keyHint.Text = "Click a key to rebind. Escape cancels."
+		keyHint.TextColor3 = theme.muted
+		refreshKeyButtons()
+	end)
+	refreshKeyButtons()
 
 	local function hideOverlays()
 		for _, overlay in pairs(overlays) do
@@ -1252,6 +1292,9 @@ do
 				Text = message,
 				Duration = 3
 			})
+		elseif key == keys.Speed and not menuOpen and not gameProcessed then
+			setSpeed(not speedEnabled)
+			setSpeedToggle(speedEnabled)
 		elseif key == keys.ESP then
 			enabled = not enabled
 			setEspToggle(enabled)
@@ -1394,7 +1437,7 @@ do
 			if not savedHumanoid then
 				savedHumanoid, savedWalkSpeed = humanoid, humanoid.WalkSpeed
 			end
-			humanoid.WalkSpeed = 24
+			humanoid.WalkSpeed = speedAmount
 		end
 		if autoJump and humanoid and humanoid.Health > 0 and humanoid.FloorMaterial ~= Enum.Material.Air then
 			humanoid.Jump = true

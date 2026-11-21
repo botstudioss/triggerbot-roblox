@@ -28,7 +28,7 @@ table.find = table.find or function(values, value)
 	for index, item in ipairs(values) do if item == value then return index end end
 end
 local codes = {}
-for _, key in ipairs({"Q", "T", "E", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
+for _, key in ipairs({"Q", "T", "E", "F", "G", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
 	codes[key] = {Name = key}
 end
 Enum = {
@@ -452,6 +452,37 @@ assert(replacementRoot.CFrame.Y == -495)
 player.Character = character
 click("[x] Speed")
 assert(humanoid.WalkSpeed == 16)
+click("Speed key: G")
+press("T")
+assert(find("TextLabel", "That key is already in use."))
+press("F")
+assert(find("TextButton", "Speed key: F"))
+if paidScript then
+	local slider = find("TextButton", "Speed amountSlider")
+	slider.AbsolutePosition, slider.AbsoluteSize = vec(0, 0), vec(220, 12)
+	slider.InputBegan:fire({UserInputType = "MouseButton1", Position = vec(220, 0)})
+	input.InputEnded:fire({UserInputType = "MouseButton1"})
+else
+	local speedInput = find("TextBox", "SpeedAmountInput")
+	speedInput.Text = "200"
+	speedInput.FocusLost:fire()
+	speedInput.Text = "201"
+	speedInput.FocusLost:fire()
+	assert(speedInput.Text == "200" and find("TextLabel", "Enter speed from 0 to 200"))
+end
+press("F")
+run.Heartbeat:fire(0.1)
+assert(humanoid.WalkSpeed == 16, "Speed key must not activate with the menu open")
+press("RightShift")
+input.InputBegan:fire({UserInputType = "Keyboard", KeyCode = codes.F}, true)
+run.Heartbeat:fire(0.1)
+assert(humanoid.WalkSpeed == 16, "Processed key must not activate speed")
+press("F")
+run.Heartbeat:fire(0.1)
+assert(humanoid.WalkSpeed == 200)
+press("F")
+assert(humanoid.WalkSpeed == 16)
+press("RightShift")
 click("[x] Anti void")
 camera.CFrame = {Position = vec(0, 0, 0), LookVector = vec(0, 0, 1), RightVector = vec(1, 0, 0)}
 click("[ ] Flight (WASD, Space, Ctrl)")
