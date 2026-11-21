@@ -122,6 +122,7 @@ local function runScheduled() while #scheduled > 0 do table.remove(scheduled, 1)
 
 dofile("Triggerbot.lua")
 local menuFrame = find("Frame", "Settings")
+assert(find("TextLabel", "DragHandle").Text == "Azure | discord.gg/azuremodded")
 local aimingPage, visualsPage = find("Frame", "AimbotPage"), find("Frame", "VisualsPage")
 find("TextButton", "VisualsTab").MouseButton1Click:fire()
 assert(visualsPage.Visible and not aimingPage.Visible)
