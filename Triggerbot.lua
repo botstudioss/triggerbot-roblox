@@ -87,6 +87,123 @@ RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, fun
 	end
 end)
 
+do
+	local enabled = false
+	local overlays = {}
+
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "PlayerESP"
+	screenGui.DisplayOrder = 2147483647
+	screenGui.IgnoreGuiInset = true
+	screenGui.ResetOnSpawn = false
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+
+	local function addPlayer(targetPlayer)
+		if targetPlayer == player or overlays[targetPlayer] then return end
+
+		local box = Instance.new("Frame")
+		box.Name = targetPlayer.Name
+		box.BackgroundTransparency = 1
+		box.Visible = false
+		box.Parent = screenGui
+
+		local outline = Instance.new("UIStroke")
+		outline.Color = Color3.fromRGB(128, 128, 128)
+		outline.Thickness = 2
+		outline.Parent = box
+
+		local username = Instance.new("TextLabel")
+		username.Name = "Username"
+		username.BackgroundTransparency = 1
+		username.Position = UDim2.new(0, 0, 1, 2)
+		username.Size = UDim2.new(1, 0, 0, 18)
+		username.Font = Enum.Font.SourceSansBold
+		username.Text = targetPlayer.Name
+		username.TextColor3 = Color3.fromRGB(255, 255, 255)
+		username.TextSize = 14
+		username.TextStrokeTransparency = 0
+		username.Parent = box
+
+		overlays[targetPlayer] = box
+	end
+
+	local function removePlayer(targetPlayer)
+		local box = overlays[targetPlayer]
+		if box then
+			box:Destroy()
+			overlays[targetPlayer] = nil
+		end
+	end
+
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		addPlayer(targetPlayer)
+	end
+	Players.PlayerAdded:Connect(addPlayer)
+	Players.PlayerRemoving:Connect(removePlayer)
+
+	UserInputService.InputBegan:Connect(function(input)
+		if UserInputService:GetFocusedTextBox() then return end
+		if input.KeyCode == Enum.KeyCode.T then
+			enabled = not enabled
+			if not enabled then
+				for _, box in pairs(overlays) do
+					box.Visible = false
+				end
+			end
+			StarterGui:SetCore("SendNotification", {
+				Title = "ESP",
+				Text = enabled and "ESP enabled" or "ESP disabled",
+				Duration = 3
+			})
+		end
+	end)
+
+	RunService.RenderStepped:Connect(function()
+		if not enabled then return end
+
+		local camera = workspace.CurrentCamera
+		for targetPlayer, box in pairs(overlays) do
+			local character = targetPlayer.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if camera and character and character.Parent and humanoid and humanoid.Health > 0 then
+				local center, size = character:GetBoundingBox()
+				local minX, minY = math.huge, math.huge
+				local maxX, maxY = -math.huge, -math.huge
+				local inFront = true
+
+				for x = -1, 1, 2 do
+					for y = -1, 1, 2 do
+						for z = -1, 1, 2 do
+							local corner = center:PointToWorldSpace(Vector3.new(
+								size.X * x / 2, size.Y * y / 2, size.Z * z / 2
+							))
+							local point = camera:WorldToViewportPoint(corner)
+							if point.Z <= 0 then
+								inFront = false
+							else
+								minX = math.min(minX, point.X)
+								minY = math.min(minY, point.Y)
+								maxX = math.max(maxX, point.X)
+								maxY = math.max(maxY, point.Y)
+							end
+						end
+					end
+				end
+
+				local viewport = camera.ViewportSize
+				box.Visible = inFront and maxX >= 0 and maxY >= 0
+					and minX <= viewport.X and minY <= viewport.Y
+				if box.Visible then
+					box.Position = UDim2.fromOffset(minX, minY)
+					box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
+				end
+			else
+				box.Visible = false
+			end
+		end
+	end)
+end
+
 StarterGui:SetCore("SendNotification", {
 	Title = "Notification",
 	Text = "made by /azuremodded",
@@ -400,115 +517,4 @@ end)
 if player.Character then
 	setupCharacter(player.Character)
 	task.spawn(scanAllToolsSafely)
-end
-
-do
-	local enabled = false
-	local overlays = {}
-
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "PlayerESP"
-	screenGui.IgnoreGuiInset = true
-	screenGui.ResetOnSpawn = false
-	screenGui.Parent = player:WaitForChild("PlayerGui")
-
-	local function addPlayer(targetPlayer)
-		if targetPlayer == player or overlays[targetPlayer] then return end
-
-		local box = Instance.new("Frame")
-		box.Name = targetPlayer.Name
-		box.BackgroundTransparency = 1
-		box.Visible = false
-		box.Parent = screenGui
-
-		local outline = Instance.new("UIStroke")
-		outline.Color = Color3.fromRGB(128, 128, 128)
-		outline.Thickness = 2
-		outline.Parent = box
-
-		local username = Instance.new("TextLabel")
-		username.Name = "Username"
-		username.BackgroundTransparency = 1
-		username.Position = UDim2.new(0, 0, 1, 2)
-		username.Size = UDim2.new(1, 0, 0, 18)
-		username.Font = Enum.Font.SourceSansBold
-		username.Text = targetPlayer.Name
-		username.TextColor3 = Color3.fromRGB(255, 255, 255)
-		username.TextSize = 14
-		username.TextStrokeTransparency = 0
-		username.Parent = box
-
-		overlays[targetPlayer] = box
-	end
-
-	local function removePlayer(targetPlayer)
-		local box = overlays[targetPlayer]
-		if box then
-			box:Destroy()
-			overlays[targetPlayer] = nil
-		end
-	end
-
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		addPlayer(targetPlayer)
-	end
-	Players.PlayerAdded:Connect(addPlayer)
-	Players.PlayerRemoving:Connect(removePlayer)
-
-	UserInputService.InputBegan:Connect(function(input)
-		if UserInputService:GetFocusedTextBox() then return end
-		if input.KeyCode == Enum.KeyCode.T then
-			enabled = not enabled
-			if not enabled then
-				for _, box in pairs(overlays) do
-					box.Visible = false
-				end
-			end
-		end
-	end)
-
-	RunService.RenderStepped:Connect(function()
-		if not enabled then return end
-
-		local camera = workspace.CurrentCamera
-		for targetPlayer, box in pairs(overlays) do
-			local character = targetPlayer.Character
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if camera and character and character.Parent and humanoid and humanoid.Health > 0 then
-				local center, size = character:GetBoundingBox()
-				local minX, minY = math.huge, math.huge
-				local maxX, maxY = -math.huge, -math.huge
-				local inFront = true
-
-				for x = -1, 1, 2 do
-					for y = -1, 1, 2 do
-						for z = -1, 1, 2 do
-							local corner = center:PointToWorldSpace(Vector3.new(
-								size.X * x / 2, size.Y * y / 2, size.Z * z / 2
-							))
-							local point = camera:WorldToViewportPoint(corner)
-							if point.Z <= 0 then
-								inFront = false
-							else
-								minX = math.min(minX, point.X)
-								minY = math.min(minY, point.Y)
-								maxX = math.max(maxX, point.X)
-								maxY = math.max(maxY, point.Y)
-							end
-						end
-					end
-				end
-
-				local viewport = camera.ViewportSize
-				box.Visible = inFront and maxX >= 0 and maxY >= 0
-					and minX <= viewport.X and minY <= viewport.Y
-				if box.Visible then
-					box.Position = UDim2.fromOffset(minX, minY)
-					box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
-				end
-			else
-				box.Visible = false
-			end
-		end
-	end)
 end
