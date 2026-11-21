@@ -572,14 +572,15 @@ do
 	local config = (function()
 		local registry, entries = {}, {}
 		local api = {}
-		local section = makeSection(pageContents.Config, "Config", 0, 325)
-		local savedSection = makeSection(pageContents.Config, "Saved configs", 248, 325)
-		local status = makeLabel(section, "Select a saved config or enter a name.", 170, 140)
+		local section = makeSection(pageContents.Config, "Config", 0, 420)
+		local savedSection = makeSection(pageContents.Config, "Saved configs", 248, 420)
+		local status = makeLabel(section, "Enter a name and save, or select a config.", 310, 95)
 		status.Name = "ConfigStatus"
 		local filename = "Azure_Public_Config.json"
+		makeLabel(section, "Config name (click to edit)", 30, 20)
 		local nameInput = Instance.new("TextBox")
 		nameInput.Name = "ConfigName"
-		nameInput.Position = UDim2.fromOffset(8, compact(35))
+		nameInput.Position = UDim2.fromOffset(8, compact(52))
 		nameInput.Size = UDim2.fromOffset(220, 20)
 		nameInput.BackgroundColor3 = theme.control
 		nameInput.BorderSizePixel = 0
@@ -593,6 +594,23 @@ do
 		nameInput.ZIndex = 14
 		nameInput.Parent = section
 		decorate(nameInput, 0, theme.border)
+		makeLabel(section, "JSON file in executor workspace", 85, 20)
+		local fileInput = Instance.new("TextBox")
+		fileInput.Name = "ConfigFile"
+		fileInput.Position = UDim2.fromOffset(8, compact(107))
+		fileInput.Size = UDim2.fromOffset(220, 20)
+		fileInput.BackgroundColor3 = theme.control
+		fileInput.BorderSizePixel = 0
+		fileInput.TextColor3 = theme.text
+		fileInput.PlaceholderColor3 = theme.muted
+		fileInput.PlaceholderText = "File name to import"
+		fileInput.ClearTextOnFocus = false
+		fileInput.Text = ""
+		fileInput.Font = Enum.Font.Code
+		fileInput.TextSize = 12
+		fileInput.ZIndex = 14
+		fileInput.Parent = section
+		decorate(fileInput, 0, theme.border)
 		local list = Instance.new("ScrollingFrame")
 		list.Name = "ConfigList"
 		list.Position = UDim2.fromOffset(8, 25)
@@ -673,6 +691,18 @@ do
 			end
 			return data.profiles
 		end
+		local function validateProfile(data)
+			assert(type(data) == "table" and data.version == 1 and type(data.values) == "table", "Invalid config format or version.")
+			for id, value in pairs(data.values) do
+				local entry = registry[id]
+				assert(entry and valid(entry, value), "Invalid or unknown setting: " .. tostring(id))
+			end
+		end
+		local function writeProfiles(profiles)
+			assert(type(writefile) == "function", "writefile is unavailable.")
+			local json = game:GetService("HttpService"):JSONEncode({version = 2, profiles = profiles})
+			assert(writefile(filename, json) ~= false, "writefile returned false.")
+		end
 		local function renderProfiles(profiles)
 			for _, button in ipairs(listButtons) do button:Destroy() end
 			listButtons = {}
@@ -704,9 +734,7 @@ do
 				values[entry.id] = value
 			end
 			profiles[name] = {version = 1, values = values}
-			local json = game:GetService("HttpService"):JSONEncode({version = 2, profiles = profiles})
-			local result = writefile(filename, json)
-			assert(result ~= false, "writefile returned false.")
+			writeProfiles(profiles)
 			nameInput.Text = name
 			renderProfiles(profiles)
 			return name
@@ -716,11 +744,7 @@ do
 			local profiles = readProfiles()
 			local data = profiles[name]
 			assert(data, "No saved config named " .. name .. ".")
-			assert(type(data) == "table" and data.version == 1 and type(data.values) == "table", "Invalid config format or version.")
-			for id, value in pairs(data.values) do
-				local entry = registry[id]
-				assert(entry and valid(entry, value), "Invalid or unknown setting: " .. tostring(id))
-			end
+			validateProfile(data)
 			local silent = registry["toggle/Section:Silent aim/Silent aim"]
 			local silentValue = silent.get()
 			local desiredSilent = data.values[silent.id]
@@ -758,19 +782,65 @@ do
 			renderProfiles(profiles)
 			return name
 		end
-		local saveButton = makeButton(section, 75)
+		local function exportConfig()
+			assert(type(writefile) == "function", "writefile is unavailable.")
+			local name = selectedName()
+			local data = readProfiles()[name]
+			assert(data, "Save this config before exporting it.")
+			validateProfile(data)
+			local base = "Azure_Public_Export_" .. name
+			local path
+			for index = 1, 10000 do
+				local candidate = base .. (index == 1 and "" or ("-" .. index)) .. ".json"
+				local exists = isfile(candidate)
+				assert(type(exists) == "boolean", "isfile returned an invalid result.")
+				if not exists then path = candidate; break end
+			end
+			assert(path, "Too many exports with this name.")
+			local json = game:GetService("HttpService"):JSONEncode(data)
+			assert(writefile(path, json) ~= false, "writefile returned false.")
+			fileInput.Text = path
+			return path
+		end
+		local function importConfig()
+			assert(type(readfile) == "function", "readfile is unavailable.")
+			local name = selectedName()
+			local path = fileInput.Text:match("^%s*(.-)%s*$")
+			assert(#path <= 128 and path:match("^[%w_ %-]+%.json$"), "Enter a JSON filename from the workspace.")
+			local data = game:GetService("HttpService"):JSONDecode(readfile(path))
+			validateProfile(data)
+			local profiles = readProfiles()
+			profiles[name] = data
+			writeProfiles(profiles)
+			nameInput.Text, fileInput.Text = name, path
+			renderProfiles(profiles)
+			return name
+		end
+		local saveButton = makeButton(section, 145)
 		saveButton.Name, saveButton.Text = "ConfigSave", "Save config"
 		saveButton.MouseButton1Click:Connect(function()
 			local ok, err = pcall(save)
 			report(ok, ok and ("Saved " .. err) or ("Save error: " .. tostring(err)))
 		end)
-		local loadButton = makeButton(section, 110)
+		local loadButton = makeButton(section, 178)
 		loadButton.Name, loadButton.Text = "ConfigLoad", "Load config"
 		loadButton.MouseButton1Click:Connect(function()
 			local ok, err = pcall(load)
 			report(ok, ok and ("Loaded " .. err) or ("Load error: " .. tostring(err)))
 		end)
-		local refreshButton = makeButton(section, 145)
+		local exportButton = makeButton(section, 211)
+		exportButton.Name, exportButton.Text = "ConfigExport", "Export JSON"
+		exportButton.MouseButton1Click:Connect(function()
+			local ok, result = pcall(exportConfig)
+			report(ok, ok and ("Exported " .. result) or ("Export error: " .. tostring(result)))
+		end)
+		local importButton = makeButton(section, 244)
+		importButton.Name, importButton.Text = "ConfigImport", "Import JSON"
+		importButton.MouseButton1Click:Connect(function()
+			local ok, result = pcall(importConfig)
+			report(ok, ok and ("Imported " .. result) or ("Import error: " .. tostring(result)))
+		end)
+		local refreshButton = makeButton(section, 277)
 		refreshButton.Name, refreshButton.Text = "ConfigRefresh", "Refresh list"
 		refreshButton.MouseButton1Click:Connect(function()
 			local ok, result = pcall(readProfiles)

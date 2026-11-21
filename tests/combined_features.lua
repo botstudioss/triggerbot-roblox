@@ -714,6 +714,13 @@ assert(box.destroyed and targetTracer.destroyed)
 for index = 2, #titles do assert(titles[index] == "Camlock") end
 
 local configStatus = find("TextLabel", "ConfigStatus")
+local configSection = configStatus.Parent
+assert(find("TextLabel", "Config name (click to edit)").Parent == configSection)
+for _, controlName in ipairs({"ConfigSave", "ConfigLoad", "ConfigExport", "ConfigImport", "ConfigRefresh"}) do
+	local control = find("TextButton", controlName)
+	assert(control.Position[2] + control.Size[2] <= configSection.Size[2])
+end
+assert(configSection.Position[2] + configSection.Size[2] <= configSection.Parent.CanvasSize[2])
 click("Save config")
 assert(configStatus.Text:lower():find("file", 1, true))
 click("Load config")
@@ -744,6 +751,10 @@ readfile = function(path) assert(files[path], "file missing"); return files[path
 isfile = function(path) return files[path] ~= nil end
 local filename = paidScript and "Azure_Paid_Config.json" or "Azure_Public_Config.json"
 local configName = find("TextBox", "ConfigName")
+configName.Text = "Unsaved"
+click("Export JSON")
+assert(configStatus.Text:lower():find("save", 1, true) and not files[filename])
+configName.Text = "Default"
 prediction.Text = "0.37"
 prediction.FocusLost:fire()
 local targetsInput = find("TextBox", "ESPTargetsInput")
@@ -777,6 +788,33 @@ press("G")
 configName.Text = "Second"
 click("Save config")
 assert(saved.profiles.Default and saved.profiles.Second)
+click("Export JSON")
+local fileInput = find("TextBox", "ConfigFile")
+local exportPath = (paidScript and "Azure_Paid_Export_" or "Azure_Public_Export_") .. "Second.json"
+assert(fileInput.Text == exportPath and files[exportPath])
+local firstExport = files[exportPath]
+click("Export JSON")
+assert(files[exportPath] == firstExport and fileInput.Text:match("Second%-2%.json$"))
+assert(files[fileInput.Text], "Repeated exports should not overwrite earlier files")
+configName.Text = "Imported"
+fileInput.Text = "../invalid.json"
+local previousCollection = files[filename]
+click("Import JSON")
+assert(files[filename] == previousCollection and configStatus.Text:lower():find("error", 1, true))
+documents.invalidProfile = {version = 1, values = {["camlock/prediction"] = 2}}
+files["Invalid.json"] = "invalidProfile"
+fileInput.Text = "Invalid.json"
+click("Import JSON")
+assert(files[filename] == previousCollection and configStatus.Text:lower():find("invalid", 1, true))
+fileInput.Text = "Missing.json"
+click("Import JSON")
+assert(files[filename] == previousCollection and configStatus.Text:lower():find("error", 1, true))
+fileInput.Text = exportPath
+click("Import JSON")
+assert(saved.profiles.Default and saved.profiles.Second and saved.profiles.Imported)
+click("Imported")
+click("Load config")
+assert(prediction.Text == "0.8" and targetsInput.Text == "Other")
 click("Refresh list")
 click("Default")
 click("Load config")

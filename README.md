@@ -10,10 +10,15 @@ In **Player > Movement**, set speed from 0 to 200 studs per second and toggle
 it with G by default. The speed key can be rebound in the same section. Games
 may override or reject client-side speed changes.
 
-In the **Config** tab, enter a name and save, or select a saved config on the
-right and click Load. Saving an existing name replaces that config. Use Refresh
-list to reload the saved names. The executor must provide `isfile`, `writefile`
-and `readfile`; errors are shown in the menu.
+In the **Config** tab, click the name field, enter a name and save, or select a
+saved config on the right and click Load. Saving an existing name replaces it.
+**Export JSON** saves the selected config as `Azure_Public_Export_<name>.json`
+or `Azure_Paid_Export_<name>.json` in the executor workspace; repeated exports
+get numbered filenames. To import, put a JSON file in
+that workspace, enter its filename and a config name, and click **Import JSON**;
+an existing config with that name is replaced. Import files from the same
+script edition. Use Refresh list to reload the saved names. The executor must
+provide `isfile`, `writefile` and `readfile`; errors are shown in the menu.
 The files are `Azure_Public_Config.json` and `Azure_Paid_Config.json` in the
 executor's file workspace. Existing single configs appear as `Default`.
 Loading may partially apply settings if a feature
