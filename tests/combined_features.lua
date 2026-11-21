@@ -22,7 +22,7 @@ UDim2 = {new = function(...) return {...} end, fromOffset = function(...) return
 Color3 = {fromRGB = function(...) return {...} end, fromHSV = function(...) return {...} end}
 math.atan2 = math.atan2 or math.atan
 local codes = {}
-for _, key in ipairs({"Q", "T", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
+for _, key in ipairs({"Q", "T", "E", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
 	codes[key] = {Name = key}
 end
 Enum = {
@@ -68,19 +68,25 @@ local input = {
 }
 local humanoid = {Health = 100, WalkSpeed = 16, FloorMaterial = "Ground"}
 local root = {Position = vec(5, 10, 5), CFrame = vec(5, 10, 5)}
+local equipped
 local character = {
 	ChildAdded = event(), ChildRemoved = event(),
-	FindFirstChildOfClass = function(_, class) if class == "Humanoid" then return humanoid end end,
+	FindFirstChildOfClass = function(_, class)
+		if class == "Humanoid" then return humanoid end
+		if class == "Tool" then return equipped end
+	end,
 	FindFirstChild = function(_, name) if name == "HumanoidRootPart" then return root end end,
 }
 local kicks = 0
+local mouseObject = {}
 local player = {
 	Team = "Blue", Character = character, CharacterAdded = event(),
-	GetMouse = function() return {} end, WaitForChild = function() return {} end,
+	GetMouse = function() return mouseObject end, WaitForChild = function() return {} end,
 	Kick = function() kicks = kicks + 1 end,
 }
 local players = {LocalPlayer = player, PlayerAdded = event(), PlayerRemoving = event()}
 local head = {Position = vec(20, 0, 10), AssemblyLinearVelocity = vec(10, 0, 0), IsA = function(_, name) return name == "BasePart" end}
+head.CFrame = vec(20, 0, 10)
 local targetHumanoid = {Health = 100}
 local targetCharacter = {
 	Parent = true,
@@ -137,6 +143,101 @@ assert(fovToggle.Position[2] + fovToggle.Size[2] < menuFrame.Size[2] - 61)
 local inputBox = find("TextBox", "PredictionInput")
 assert(inputBox.Position[2] + inputBox.Size[2] <= inputBox.Parent.Size[2])
 assert(inputBox.Parent.Size[2] <= inputBox.Parent.Parent.CanvasSize[2])
+click("[ ] Silent aim")
+assert(find("TextLabel", "Executor hook APIs unavailable."))
+click("[ ] Silent aim")
+assert(find("TextLabel", "Executor hook APIs unavailable."))
+local hooks, caller, method = {}, false, "Raycast"
+hookmetamethod = function(_, name, callback)
+	hooks[name] = callback
+	if name == "__index" then return function() return "original" end end
+	return function(_, origin, direction) return origin, direction end
+end
+newcclosure = function(callback) return callback end
+checkcaller = function() return caller end
+getnamecallmethod = function() return method end
+typeof = function(value) return getmetatable(value) == vector and "Vector3" or type(value) end
+click("[ ] Silent aim")
+assert(hooks.__index)
+equipped = {}
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == "original")
+click("[x] Silent wall check")
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == head)
+click("[ ] Silent wall check")
+blocked = false
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == head)
+target.Team = "Blue"
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == "original")
+click("[x] Silent team check")
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == head)
+click("[ ] Silent team check")
+target.Team = "Red"
+assert(hooks.__index(mouseObject, "Hit").X == 20)
+caller = true
+assert(hooks.__index(mouseObject, "Target") == "original")
+caller = false
+equipped = nil
+assert(hooks.__index(mouseObject, "Target") == "original")
+equipped = {}
+head.Position = vec(160, 0, 10)
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == "original")
+find("TextButton", "SilentFOVIncrease").MouseButton1Click:fire()
+run.RenderStepped:fire()
+assert(hooks.__index(mouseObject, "Target") == head)
+click("Method: Mouse")
+assert(hooks.__namecall)
+local origin, direction = hooks.__namecall(workspace, vec(0, 0, 0), vec(0, 0, 100))
+assert(origin.Magnitude == 0 and math.abs(direction.Magnitude - 100) < 0.000001 and direction.X > 99)
+method = "Other"
+_, direction = hooks.__namecall(workspace, vec(0, 0, 0), vec(0, 0, 100))
+assert(direction.X == 0)
+method = "Raycast"
+click("[x] Silent aim")
+_, direction = hooks.__namecall(workspace, vec(0, 0, 0), vec(0, 0, 100))
+assert(direction.X == 0)
+equipped = nil
+head.Position = vec(20, 0, 10)
+
+camera.CFrame.Lerp = function(self, target) self.target = target.target; return self end
+click("[ ] Aimbot")
+click("[ ] Aimbot FOV circle")
+click("[ ] Silent FOV circle")
+run.RenderStepped:fire()
+assert(find("Frame", "AimbotFOV").Size[1] == 300)
+assert(find("Frame", "SilentFOV").Size[1] == 350)
+head.Position = vec(160, 0, 10)
+input.InputBegan:fire({UserInputType = "Keyboard", KeyCode = codes.E}, true)
+run.render()
+assert(camera.CFrame.target == nil)
+press("E")
+run.render()
+assert(camera.CFrame.target == nil)
+find("TextButton", "AimbotFOVIncrease").MouseButton1Click:fire()
+run.render()
+assert(camera.CFrame.target == head.Position)
+head.Position = vec(20, 0, 10)
+run.render()
+assert(camera.CFrame.target == head.Position)
+camera.CFrame.target = nil
+input.InputEnded:fire({UserInputType = "Keyboard", KeyCode = codes.E}, false)
+run.render()
+assert(camera.CFrame.target == nil)
+click("Mode: Hold")
+press("E")
+run.render()
+assert(camera.CFrame.target == head.Position)
+camera.CFrame.target = nil
+press("E")
+run.render()
+assert(camera.CFrame.target == nil)
+click("[x] Aimbot")
+blocked = true
 press("RightShift")
 press("RightShift")
 press("T")

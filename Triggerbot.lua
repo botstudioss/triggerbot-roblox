@@ -1,3 +1,20 @@
+-- Silent Aim hook approach adapted from Averiias/Universal-SilentAim (MIT).
+-- Copyright (c) 2022 Averiias
+-- Permission is hereby granted, free of charge, to any person obtaining a copy
+-- of this software and associated documentation files (the "Software"), to deal
+-- in the Software without restriction, including without limitation the rights
+-- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+-- copies of the Software, and to permit persons to whom the Software is
+-- furnished to do so, subject to the following conditions:
+-- The above copyright notice and this permission notice shall be included in all
+-- copies or substantial portions of the Software.
+-- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+-- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+-- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+-- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+-- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+-- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+-- SOFTWARE.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
@@ -5,6 +22,7 @@ local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
+local mouse = player:GetMouse()
 local IGNORE_TEAMMATES = true
 local fovRadius = 150
 local fovLimitEnabled = true
@@ -21,6 +39,8 @@ local mouseDown = false
 local lastTarget
 
 local lockedPlayer
+local aim = {enabled = false, active = false, hold = true, radius = 150, limit = true, wall = true, team = true, part = "Head", smoothing = 0.25}
+local silent = {enabled = false, radius = 150, limit = true, wall = true, team = true, part = "Head", method = "Mouse", target = nil}
 
 local function aimPosition(targetPart)
 	if predictionEnabled then
@@ -41,18 +61,19 @@ local function isVisible(targetPart, camera)
 	return not hit or hit.Instance:IsDescendantOf(targetPart.Parent)
 end
 
-local function getTargetPart(targetPlayer)
+local function getTargetPart(targetPlayer, partName, checkTeam)
 	if not targetPlayer or targetPlayer == player or targetPlayer.Parent ~= Players then
 		return nil
 	end
 
-	if IGNORE_TEAMMATES and player.Team and targetPlayer.Team == player.Team then
+	if checkTeam == nil then checkTeam = IGNORE_TEAMMATES end
+	if checkTeam and player.Team and targetPlayer.Team == player.Team then
 		return nil
 	end
 
 	local character = targetPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local head = character and character:FindFirstChild("Head")
+	local head = character and character:FindFirstChild(partName or "Head")
 
 	if humanoid and humanoid.Health > 0 and head and head:IsA("BasePart") then
 		return head
@@ -60,21 +81,24 @@ local function getTargetPart(targetPlayer)
 	return nil
 end
 
-local function getClosestPlayer()
+local function getClosestPlayer(settings)
 	local camera = workspace.CurrentCamera
 	if not camera then return nil end
 
 	local mousePosition = UserInputService:GetMouseLocation()
 	local closestPlayer
-	local closestDistance = fovLimitEnabled and fovRadius or math.huge
+	local closestDistance = settings and (settings.limit and settings.radius or math.huge)
+		or (fovLimitEnabled and fovRadius or math.huge)
 
 	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-		local targetPart = getTargetPart(targetPlayer)
+		local targetPart = getTargetPart(targetPlayer, settings and settings.part, settings and settings.team)
 		if targetPart then
 			local screenPosition, onScreen = camera:WorldToScreenPoint(targetPart.Position)
 			if onScreen and screenPosition.Z > 0 then
 				local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - mousePosition).Magnitude
-				if distance <= closestDistance and (not wallCheck or isVisible(targetPart, camera)) then
+				local checkWall = settings and settings.wall
+				if not settings then checkWall = wallCheck end
+				if distance <= closestDistance and (not checkWall or isVisible(targetPart, camera)) then
 					closestDistance = distance
 					closestPlayer = targetPlayer
 				end
@@ -86,7 +110,20 @@ local function getClosestPlayer()
 end
 
 RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, function()
-	if not lockedPlayer then return end
+	if not lockedPlayer then
+		if not aim.enabled or not aim.active or menuOpen or UserInputService:GetFocusedTextBox() then return end
+		local camera = workspace.CurrentCamera
+		local target = camera and getClosestPlayer(aim)
+		local part = target and getTargetPart(target, aim.part, aim.team)
+		if part then
+			local position = camera.CFrame.Position
+			local destination = aimPosition(part)
+			if (destination - position).Magnitude > 0 then
+				camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(position, destination), aim.smoothing)
+			end
+		end
+		return
+	end
 
 	local targetPart = getTargetPart(lockedPlayer)
 	if not targetPart then
@@ -103,6 +140,63 @@ RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, fun
 		end
 	end
 end)
+
+local mouseHookInstalled, rayHookInstalled = false, false
+local function silentTarget()
+	if not silent.enabled or menuOpen then return nil end
+	local character = player.Character
+	if not character or not character:FindFirstChildOfClass("Tool") then return nil end
+	local target = silent.target
+	return target and getTargetPart(target, silent.part, silent.team) or nil
+end
+
+local function installSilentHook(method)
+	if type(hookmetamethod) ~= "function" or type(newcclosure) ~= "function" or type(checkcaller) ~= "function" then
+		return false, "Executor hook APIs unavailable."
+	end
+	if method == "Raycast" and type(getnamecallmethod) ~= "function" then
+		return false, "Raycast hook API unavailable."
+	end
+	if (method == "Mouse" and mouseHookInstalled) or (method == "Raycast" and rayHookInstalled) then
+		return true
+	end
+	local old
+	local ok, err = pcall(function()
+		if method == "Mouse" then
+			old = hookmetamethod(game, "__index", newcclosure(function(object, key)
+				if object == mouse and not checkcaller() and silent.method == "Mouse" and (key == "Hit" or key == "Target") then
+					local part = silentTarget()
+					if part then
+						if key == "Target" then return part end
+						return part.CFrame + (aimPosition(part) - part.Position)
+					end
+				end
+				return old(object, key)
+			end))
+			mouseHookInstalled = true
+		else
+			old = hookmetamethod(game, "__namecall", newcclosure(function(object, ...)
+				if object == workspace and not checkcaller() and silent.method == "Raycast" and getnamecallmethod() == "Raycast" then
+					local part = silentTarget()
+					if part then
+						local args = table.pack(...)
+						if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
+							local direction = aimPosition(part) - args[1]
+							if direction.Magnitude > 0 and args[2].Magnitude > 0 then
+								args[2] = direction.Unit * args[2].Magnitude
+								return old(object, table.unpack(args, 1, args.n))
+							end
+						end
+					end
+				end
+				return old(object, ...)
+			end))
+			rayHookInstalled = true
+		end
+	end)
+	if not ok then return false, "Hook failed: " .. tostring(err) end
+	return true
+end
 
 do
 	local enabled = false
@@ -270,7 +364,7 @@ do
 	local pageContents = {}
 	local tabs = {}
 
-	for index, name in ipairs({"Aimbot", "Player", "Visuals"}) do
+	for index, name in ipairs({"Aimbot", "Player", "Visuals", "Aim modes"}) do
 		local page = Instance.new("Frame")
 		page.Name = name .. "Page"
 		page.Position = UDim2.fromOffset(8, 53)
@@ -358,6 +452,8 @@ do
 	local visibilitySection = makeSection(pageContents.Player, "Movement", 248, 166)
 	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0, 300)
 	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248, 262)
+	local aimSection = makeSection(pageContents["Aim modes"], "Camera aimbot", 0, 476)
+	local silentSection = makeSection(pageContents["Aim modes"], "Silent aim", 248, 476)
 
 	local function makeLabel(parent, text, y, height)
 		local label = Instance.new("TextLabel")
@@ -421,8 +517,8 @@ do
 		end
 		button.MouseButton1Click:Connect(function()
 			value = not value
+			if changed(value) == false then value = not value end
 			refresh()
-			changed(value)
 		end)
 		refresh()
 		return function(newValue)
@@ -449,6 +545,7 @@ do
 	end
 
 	local keyHint = makeLabel(keySection, "Click a key to rebind. Escape cancels.", 145, 24)
+	keys.Aim = Enum.KeyCode.E
 	for index, name in ipairs({"Camlock", "ESP", "Menu"}) do
 		local button = makeButton(keySection, 35 + (index - 1) * 32)
 		keyButtons[name] = button
@@ -572,6 +669,133 @@ do
 		predictionTime = math.min(1, predictionTime + 0.05)
 		updatePrediction()
 	end)
+
+	local aimCircle = Instance.new("Frame")
+	aimCircle.Name = "AimbotFOV"
+	aimCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	aimCircle.BackgroundTransparency = 1
+	aimCircle.Visible = false
+	aimCircle.Parent = screenGui
+	local aimRound = Instance.new("UICorner")
+	aimRound.CornerRadius = UDim.new(1, 0)
+	aimRound.Parent = aimCircle
+	local aimStroke = Instance.new("UIStroke")
+	aimStroke.Color = Color3.fromRGB(100, 200, 255)
+	aimStroke.Thickness = 1
+	aimStroke.Parent = aimCircle
+	local silentCircle = Instance.new("Frame")
+	silentCircle.Name = "SilentFOV"
+	silentCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	silentCircle.BackgroundTransparency = 1
+	silentCircle.Visible = false
+	silentCircle.Parent = screenGui
+	local silentRound = Instance.new("UICorner")
+	silentRound.CornerRadius = UDim.new(1, 0)
+	silentRound.Parent = silentCircle
+	local silentStroke = Instance.new("UIStroke")
+	silentStroke.Color = Color3.fromRGB(210, 125, 255)
+	silentStroke.Thickness = 1
+	silentStroke.Parent = silentCircle
+	local showAimCircle, showSilentCircle = false, false
+
+	local aimKeyButton = makeButton(aimSection, 35)
+	keyButtons.Aim = aimKeyButton
+	aimKeyButton.MouseButton1Click:Connect(function()
+		waitingForKey = "Aim"
+		keyHint.Text = "Click a key to rebind. Escape cancels."
+		keyHint.TextColor3 = theme.muted
+		refreshKeyButtons()
+	end)
+	refreshKeyButtons()
+	makeToggle(aimSection, 67, "Aimbot", false, function(value)
+		aim.enabled, aim.active = value, false
+	end)
+	local aimMode = makeButton(aimSection, 99)
+	local function refreshAimMode() aimMode.Text = "Mode: " .. (aim.hold and "Hold" or "Toggle") end
+	refreshAimMode()
+	aimMode.MouseButton1Click:Connect(function()
+		aim.hold = not aim.hold
+		aim.active = false
+		refreshAimMode()
+	end)
+	makeToggle(aimSection, 131, "Aimbot FOV limit", true, function(value) aim.limit = value end)
+	makeToggle(aimSection, 163, "Aimbot FOV circle", false, function(value) showAimCircle = value end)
+	makeToggle(aimSection, 195, "Aimbot wall check", true, function(value) aim.wall = value end)
+	makeToggle(aimSection, 227, "Aimbot team check", true, function(value) aim.team = value end)
+	local aimPartButton = makeButton(aimSection, 259)
+	local function refreshAimPart() aimPartButton.Text = "Target: " .. aim.part end
+	refreshAimPart()
+	aimPartButton.MouseButton1Click:Connect(function()
+		aim.part = aim.part == "Head" and "HumanoidRootPart" or "Head"
+		refreshAimPart()
+	end)
+	local aimRadius = makeLabel(aimSection, "", 291)
+	local function refreshAimRadius() aimRadius.Text = "Aimbot FOV: " .. aim.radius end
+	refreshAimRadius()
+	local aimMinus = makeButton(aimSection, 323, 104, 8)
+	aimMinus.Name, aimMinus.Text = "AimbotFOVDecrease", "-"
+	aimMinus.MouseButton1Click:Connect(function() aim.radius = math.max(25, aim.radius - 25); refreshAimRadius() end)
+	local aimPlus = makeButton(aimSection, 323, 104, 124)
+	aimPlus.Name, aimPlus.Text = "AimbotFOVIncrease", "+"
+	aimPlus.MouseButton1Click:Connect(function() aim.radius = math.min(1000, aim.radius + 25); refreshAimRadius() end)
+	local smoothButton = makeButton(aimSection, 355)
+	local function refreshSmooth() smoothButton.Text = string.format("Smoothing: %.2f", aim.smoothing) end
+	refreshSmooth()
+	smoothButton.MouseButton1Click:Connect(function()
+		aim.smoothing = aim.smoothing >= 1 and 0.1 or math.min(1, aim.smoothing + 0.15)
+		refreshSmooth()
+	end)
+	makeLabel(aimSection, "Uses the Aimbot tab prediction setting.", 390, 48)
+
+	local silentStatus = makeLabel(silentSection, "Experimental: game support unknown.", 395, 65)
+	local function silentError(message)
+		silentStatus.Text = message
+		silentStatus.TextColor3 = Color3.fromRGB(255, 115, 115)
+	end
+	makeToggle(silentSection, 35, "Silent aim", false, function(value)
+		if value then
+			local ok, err = installSilentHook(silent.method)
+			if not ok then silentError(err); return false end
+		end
+		silent.enabled = value
+		silent.target = nil
+		silentStatus.Text = "Experimental: game support unknown."
+		silentStatus.TextColor3 = theme.muted
+	end)
+	local methodButton = makeButton(silentSection, 67)
+	local function refreshMethod() methodButton.Text = "Method: " .. silent.method end
+	refreshMethod()
+	methodButton.MouseButton1Click:Connect(function()
+		local method = silent.method == "Mouse" and "Raycast" or "Mouse"
+		if silent.enabled then
+			local ok, err = installSilentHook(method)
+			if not ok then silentError(err); return end
+		end
+		silent.method = method
+		refreshMethod()
+	end)
+	makeToggle(silentSection, 99, "Silent FOV limit", true, function(value) silent.limit = value end)
+	makeToggle(silentSection, 131, "Silent FOV circle", false, function(value) showSilentCircle = value end)
+	makeToggle(silentSection, 163, "Silent wall check", true, function(value) silent.wall = value end)
+	makeToggle(silentSection, 195, "Silent team check", true, function(value) silent.team = value end)
+	local silentPartButton = makeButton(silentSection, 227)
+	local function refreshSilentPart() silentPartButton.Text = "Target: " .. silent.part end
+	refreshSilentPart()
+	silentPartButton.MouseButton1Click:Connect(function()
+		silent.part = silent.part == "Head" and "HumanoidRootPart" or "Head"
+		silent.target = nil
+		refreshSilentPart()
+	end)
+	local silentRadius = makeLabel(silentSection, "", 259)
+	local function refreshSilentRadius() silentRadius.Text = "Silent FOV: " .. silent.radius end
+	refreshSilentRadius()
+	local silentMinus = makeButton(silentSection, 291, 104, 8)
+	silentMinus.Name, silentMinus.Text = "SilentFOVDecrease", "-"
+	silentMinus.MouseButton1Click:Connect(function() silent.radius = math.max(25, silent.radius - 25); refreshSilentRadius() end)
+	local silentPlus = makeButton(silentSection, 291, 104, 124)
+	silentPlus.Name, silentPlus.Text = "SilentFOVIncrease", "+"
+	silentPlus.MouseButton1Click:Connect(function() silent.radius = math.min(1000, silent.radius + 25); refreshSilentRadius() end)
+	makeLabel(silentSection, "Raycast mode redirects game rays while a tool is equipped.", 323, 64)
 
 	makeToggle(teamSection, 35, "Team check", true, function(value) IGNORE_TEAMMATES = value end)
 	makeLabel(teamSection, "Existing locks stay active behind walls.", 70, 50)
@@ -776,7 +1000,7 @@ do
 	Players.PlayerAdded:Connect(addPlayer)
 	Players.PlayerRemoving:Connect(removePlayer)
 
-	UserInputService.InputBegan:Connect(function(input)
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if UserInputService:GetFocusedTextBox() then return end
 		if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
 
@@ -801,6 +1025,7 @@ do
 					keyHint.TextColor3 = Color3.fromRGB(255, 115, 115)
 				else
 					keys[waitingForKey] = key
+					if waitingForKey == "Aim" then aim.active = false end
 					waitingForKey = nil
 					keyHint.Text = "Click a key to rebind. Escape cancels."
 					keyHint.TextColor3 = theme.muted
@@ -818,7 +1043,10 @@ do
 			stopStatsDrag()
 			if menuOpen then
 				leftHeld, mouseDown, lastTarget = false, false, nil
+				aim.active = false
 			end
+		elseif key == keys.Aim and aim.enabled and not menuOpen and not gameProcessed then
+			aim.active = aim.hold or not aim.active
 		elseif key == keys.Camlock and camlockEnabled then
 			local message
 
@@ -845,11 +1073,24 @@ do
 		end
 	end)
 
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == keys.Aim and aim.hold then
+			aim.active = false
+		end
+	end)
+
 	RunService.RenderStepped:Connect(function()
 		local mousePosition = UserInputService:GetMouseLocation()
 		circle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
 		circle.Size = UDim2.fromOffset(fovRadius * 2, fovRadius * 2)
 		circleOutline.Color = palette[colorIndexes.FOV].Value
+		aimCircle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
+		aimCircle.Size = UDim2.fromOffset(aim.radius * 2, aim.radius * 2)
+		aimCircle.Visible = showAimCircle and aim.limit
+		silentCircle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
+		silentCircle.Size = UDim2.fromOffset(silent.radius * 2, silent.radius * 2)
+		silentCircle.Visible = showSilentCircle and silent.limit
+		silent.target = silent.enabled and not menuOpen and getClosestPlayer(silent) or nil
 
 		local camera = workspace.CurrentCamera
 		if cameraFovEnabled and camera then
@@ -1006,7 +1247,6 @@ StarterGui:SetCore("SendNotification", {
 	Duration = 5
 })
 
-local mouse = player:GetMouse()
 local ContextActionService = game:GetService("ContextActionService")
 local AUTO_SHOOT_ENABLED = true
 
