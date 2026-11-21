@@ -26,16 +26,17 @@ for _, key in ipairs({"Q", "T", "RightShift", "Escape", "Unknown", "LeftControl"
 	codes[key] = {Name = key}
 end
 Enum = {
-	KeyCode = codes, UserInputType = {Keyboard = "Keyboard", MouseButton1 = "MouseButton1"},
-	Font = {Code = 1, SourceSans = 2, SourceSansBold = 3}, TextXAlignment = {Left = 1},
+	KeyCode = codes, UserInputType = {Keyboard = "Keyboard", MouseButton1 = "MouseButton1", MouseMovement = "MouseMovement"},
+	Font = {Code = 1, SourceSans = 2, SourceSansBold = 3, Gotham = 4, GothamBold = 5}, TextXAlignment = {Left = 1},
 	RenderPriority = {Camera = {Value = 200}}, RaycastFilterType = {Exclude = 1, Blacklist = 1},
 	ScrollingDirection = {Y = 1}, HighlightDepthMode = {AlwaysOnTop = 1}, Material = {Air = "Air"},
 	ContextActionResult = {Pass = "Pass", Sink = "Sink"},
+	ApplyStrokeMode = {Border = 1},
 }
 RaycastParams = {new = function() return {} end}
 local objects = {}
 Instance = {new = function(class)
-	local object = {class = class, MouseButton1Click = event(), Destroy = function(self) self.destroyed = true end}
+	local object = {class = class, MouseButton1Click = event(), InputBegan = event(), Destroy = function(self) self.destroyed = true end}
 	table.insert(objects, object)
 	return object
 end}
@@ -125,7 +126,21 @@ click("[ ] Target stats")
 run.RenderStepped:fire()
 assert(find("Frame", "TargetDot").Visible and find("Frame", "TargetTracer").Visible)
 assert(find("Highlight", "AzureTargetHighlight").Adornee == targetCharacter)
-assert(find("TextLabel", "TargetStats").Text:find("Target"))
+local stats = find("TextLabel", "TargetStats")
+assert(stats.Text:find("Target"))
+stats.AbsolutePosition, stats.AbsoluteSize = vec(20, 50), vec(220, 34)
+stats.InputBegan:fire({UserInputType = "MouseButton1", Position = vec(30, 60)})
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(100, 100)}, false)
+assert(stats.Position[1] == 20 and stats.Position[2] == 50)
+press("RightShift")
+assert(stats.Active)
+stats.InputBegan:fire({UserInputType = "MouseButton1", Position = vec(30, 60)})
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(100, 100)}, false)
+assert(stats.Position[1] == 90 and stats.Position[2] == 90)
+press("RightShift")
+assert(not stats.Active)
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(150, 150)}, false)
+assert(stats.Position[1] == 90 and stats.Position[2] == 90)
 click("[x] Camlock")
 run.RenderStepped:fire()
 assert(not find("Frame", "TargetDot").Visible and not find("Highlight", "AzureTargetHighlight").Enabled)
@@ -142,6 +157,21 @@ target.Team = "Red"
 
 press("RightShift")
 assert(blockClick("BlockMouseClick", "Begin") == "Pass")
+local menu, handle = find("Frame", "Settings"), find("TextLabel", "DragHandle")
+menu.AbsolutePosition, menu.AbsoluteSize = vec(20, 100), vec(500, 400)
+handle.InputBegan:fire({UserInputType = "MouseButton1", Position = vec(40, 120)})
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(90, 150)}, false)
+assert(menu.Position[1] == 70 and menu.Position[2] == 130)
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(2000, -100)}, false)
+assert(menu.Position[1] == 300 and menu.Position[2] == 0)
+input.InputEnded:fire({UserInputType = "MouseButton1"}, false)
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(100, 100)}, false)
+assert(menu.Position[1] == 300 and menu.Position[2] == 0)
+handle.InputBegan:fire({UserInputType = "MouseButton1", Position = vec(40, 120)})
+press("RightShift")
+press("RightShift")
+input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(100, 100)}, false)
+assert(menu.Position[1] == 300 and menu.Position[2] == 0)
 click("[x] Triggerbot")
 runScheduled()
 assert(kicks == 0)

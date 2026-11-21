@@ -126,6 +126,29 @@ do
 		{Name = "Green", Value = Color3.fromRGB(75, 220, 100)}
 	}
 	local colorIndexes = {Visible = 1, Hidden = 2, FOV = 3}
+	local theme = {
+		background = Color3.fromRGB(15, 20, 32),
+		surface = Color3.fromRGB(22, 29, 44),
+		control = Color3.fromRGB(31, 41, 58),
+		border = Color3.fromRGB(48, 64, 86),
+		accent = Color3.fromRGB(80, 175, 255),
+		active = Color3.fromRGB(30, 70, 105),
+		text = Color3.fromRGB(235, 242, 250),
+		muted = Color3.fromRGB(150, 166, 186)
+	}
+
+	local function decorate(parent, radius, color)
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, radius)
+		corner.Parent = parent
+		if color then
+			local stroke = Instance.new("UIStroke")
+			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			stroke.Color = color
+			stroke.Thickness = 1
+			stroke.Parent = parent
+		end
+	end
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "PlayerESP"
@@ -150,36 +173,88 @@ do
 	round.Parent = circle
 
 	local circleOutline = Instance.new("UIStroke")
-	circleOutline.Thickness = 2
+	circleOutline.Thickness = 1.5
+	circleOutline.Transparency = 0.2
 	circleOutline.Parent = circle
 
 	local menu = Instance.new("Frame")
 	menu.Name = "Settings"
-	menu.Size = UDim2.fromOffset(500, 350)
+	menu.Size = UDim2.fromOffset(500, 400)
 	menu.Position = UDim2.fromOffset(20, 100)
-	menu.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	menu.BorderColor3 = Color3.fromRGB(70, 70, 70)
+	menu.BackgroundColor3 = theme.background
+	menu.BorderSizePixel = 0
 	menu.ZIndex = 10
 	menu.Visible = false
 	menu.Parent = screenGui
+	decorate(menu, 10, theme.border)
 
 	local title = Instance.new("TextLabel")
-	title.Position = UDim2.fromOffset(6, 0)
-	title.Size = UDim2.new(1, -12, 0, 25)
-	title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	title.Name = "DragHandle"
+	title.Position = UDim2.fromOffset(0, 0)
+	title.Size = UDim2.new(1, 0, 0, 50)
+	title.BackgroundTransparency = 1
 	title.BorderSizePixel = 0
 	title.Text = "Azure | @socialdw | .gg/azuremodded"
-	title.Font = Enum.Font.Code
-	title.TextSize = 15
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 13
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextColor3 = theme.text
+	title.Active = true
 	title.ZIndex = 11
 	title.Parent = menu
 
+	local titlePadding = Instance.new("UIPadding")
+	titlePadding.PaddingLeft = UDim.new(0, 16)
+	titlePadding.Parent = title
+
+	local dragHint = Instance.new("TextLabel")
+	dragHint.Position = UDim2.new(1, -124, 0, 0)
+	dragHint.Size = UDim2.fromOffset(108, 50)
+	dragHint.BackgroundTransparency = 1
+	dragHint.Text = "DRAG TO MOVE"
+	dragHint.Font = Enum.Font.Gotham
+	dragHint.TextSize = 10
+	dragHint.TextColor3 = theme.muted
+	dragHint.ZIndex = 12
+	dragHint.Parent = title
+
+	local function makeDraggable(handle, target, canDrag)
+		local dragging, startX, startY, targetX, targetY
+		handle.Active = true
+		handle.InputBegan:Connect(function(input)
+			if not target.Visible or not canDrag() or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+			dragging = true
+			startX, startY = input.Position.X, input.Position.Y
+			targetX, targetY = target.AbsolutePosition.X, target.AbsolutePosition.Y
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if not dragging then return end
+			if not target.Visible or not canDrag() then
+				dragging = false
+				return
+			end
+			if input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+			local x = targetX + input.Position.X - startX
+			local y = targetY + input.Position.Y - startY
+			local camera = workspace.CurrentCamera
+			if camera then
+				x = math.max(0, math.min(x, math.max(0, camera.ViewportSize.X - target.AbsoluteSize.X)))
+				y = math.max(0, math.min(y, math.max(0, camera.ViewportSize.Y - target.AbsoluteSize.Y)))
+			end
+			target.Position = UDim2.fromOffset(x, y)
+		end)
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+		end)
+		return function() dragging = false end
+	end
+	local stopMenuDrag = makeDraggable(title, menu, function() return menu.Visible end)
+	local stopStatsDrag
+
 	local separator = Instance.new("Frame")
-	separator.Position = UDim2.fromOffset(5, 25)
-	separator.Size = UDim2.new(1, -10, 0, 1)
-	separator.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
+	separator.Position = UDim2.fromOffset(16, 49)
+	separator.Size = UDim2.new(1, -32, 0, 1)
+	separator.BackgroundColor3 = theme.border
 	separator.BorderSizePixel = 0
 	separator.ZIndex = 11
 	separator.Parent = menu
@@ -191,8 +266,8 @@ do
 	for index, name in ipairs({"Aimbot", "Player", "Visuals"}) do
 		local page = Instance.new("Frame")
 		page.Name = name .. "Page"
-		page.Position = UDim2.fromOffset(8, 55)
-		page.Size = UDim2.new(1, -16, 1, -63)
+		page.Position = UDim2.fromOffset(8, 94)
+		page.Size = UDim2.new(1, -16, 1, -102)
 		page.BackgroundTransparency = 1
 		page.Visible = name == "Aimbot"
 		page.ZIndex = 11
@@ -204,6 +279,7 @@ do
 		content.BorderSizePixel = 0
 		content.CanvasSize = UDim2.fromOffset(0, 560)
 		content.ScrollBarThickness = 5
+		content.ScrollBarImageColor3 = theme.border
 		content.ScrollingDirection = Enum.ScrollingDirection.Y
 		content.ZIndex = 12
 		content.Parent = page
@@ -211,24 +287,24 @@ do
 
 		local tab = Instance.new("TextButton")
 		tab.Name = name .. "Tab"
-		tab.Position = UDim2.fromOffset(8 + (index - 1) * 78, 28)
-		tab.Size = UDim2.fromOffset(76, 24)
-		tab.BackgroundTransparency = 1
+		tab.Position = UDim2.fromOffset(16 + (index - 1) * 106, 57)
+		tab.Size = UDim2.fromOffset(98, 28)
+		tab.BackgroundColor3 = name == "Aimbot" and theme.active or theme.background
+		tab.BorderSizePixel = 0
 		tab.Text = name
-		tab.Font = Enum.Font.Code
-		tab.TextSize = 15
-		tab.TextColor3 = name == "Aimbot" and Color3.fromRGB(255, 255, 255)
-			or Color3.fromRGB(155, 155, 155)
+		tab.Font = Enum.Font.GothamBold
+		tab.TextSize = 12
+		tab.TextColor3 = name == "Aimbot" and theme.accent or theme.muted
 		tab.ZIndex = 11
 		tab.Parent = menu
+		decorate(tab, 6)
 		tabs[name] = tab
 
 		tab.MouseButton1Click:Connect(function()
 			for pageName, otherPage in pairs(pages) do
 				otherPage.Visible = pageName == name
-				tabs[pageName].TextColor3 = pageName == name
-					and Color3.fromRGB(255, 255, 255)
-					or Color3.fromRGB(155, 155, 155)
+				tabs[pageName].TextColor3 = pageName == name and theme.accent or theme.muted
+				tabs[pageName].BackgroundColor3 = pageName == name and theme.active or theme.background
 			end
 		end)
 	end
@@ -237,27 +313,28 @@ do
 		local section = Instance.new("Frame")
 		section.Position = UDim2.fromOffset(x, 0)
 		section.Size = UDim2.fromOffset(236, 550)
-		section.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-		section.BorderColor3 = Color3.fromRGB(60, 60, 60)
+		section.BackgroundColor3 = theme.surface
+		section.BorderSizePixel = 0
 		section.ZIndex = 13
 		section.Parent = page
+		decorate(section, 8, theme.border)
 
 		local heading = Instance.new("TextLabel")
 		heading.Position = UDim2.fromOffset(8, 5)
 		heading.Size = UDim2.new(1, -16, 0, 20)
 		heading.BackgroundTransparency = 1
 		heading.Text = name
-		heading.TextColor3 = Color3.fromRGB(230, 230, 230)
+		heading.TextColor3 = theme.text
 		heading.TextXAlignment = Enum.TextXAlignment.Left
-		heading.Font = Enum.Font.Code
-		heading.TextSize = 14
+		heading.Font = Enum.Font.GothamBold
+		heading.TextSize = 12
 		heading.ZIndex = 14
 		heading.Parent = section
 
 		local line = Instance.new("Frame")
 		line.Position = UDim2.fromOffset(8, 25)
 		line.Size = UDim2.new(1, -16, 0, 1)
-		line.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+		line.BackgroundColor3 = theme.border
 		line.BorderSizePixel = 0
 		line.ZIndex = 14
 		line.Parent = section
@@ -278,11 +355,11 @@ do
 		label.Size = UDim2.new(1, -16, 0, height or 24)
 		label.BackgroundTransparency = 1
 		label.Text = text
-		label.TextColor3 = Color3.fromRGB(180, 180, 180)
+		label.TextColor3 = theme.muted
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.TextWrapped = true
-		label.Font = Enum.Font.Code
-		label.TextSize = 14
+		label.Font = Enum.Font.Gotham
+		label.TextSize = 12
 		label.ZIndex = 14
 		label.Parent = parent
 		return label
@@ -292,13 +369,14 @@ do
 		local button = Instance.new("TextButton")
 		button.Position = UDim2.fromOffset(x or 8, y)
 		button.Size = UDim2.fromOffset(width or 220, 26)
-		button.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
-		button.BorderColor3 = Color3.fromRGB(10, 10, 10)
-		button.TextColor3 = Color3.fromRGB(220, 220, 220)
-		button.Font = Enum.Font.Code
-		button.TextSize = 14
+		button.BackgroundColor3 = theme.control
+		button.BorderSizePixel = 0
+		button.TextColor3 = theme.text
+		button.Font = Enum.Font.Gotham
+		button.TextSize = 12
 		button.ZIndex = 14
 		button.Parent = parent
+		decorate(button, 5)
 		return button
 	end
 
@@ -307,6 +385,8 @@ do
 		local button = makeButton(parent, y)
 		local function refresh()
 			button.Text = (value and "[x] " or "[ ] ") .. name
+			button.BackgroundColor3 = value and theme.active or theme.control
+			button.TextColor3 = value and theme.accent or theme.muted
 		end
 		button.MouseButton1Click:Connect(function()
 			value = not value
@@ -421,6 +501,7 @@ do
 
 	makeToggle(teamSection, 35, "Team check", true, function(value) IGNORE_TEAMMATES = value end)
 	makeLabel(teamSection, "Existing locks stay active behind walls.", 70, 50)
+	makeLabel(teamSection, "Drag target stats while the menu is open.", 125, 50)
 	makeToggle(visibilitySection, 35, "Speed", false, function(value)
 		speedEnabled = value
 		if not value and savedHumanoid then
@@ -503,10 +584,11 @@ do
 	targetDot.Name = "TargetDot"
 	targetDot.AnchorPoint = Vector2.new(0.5, 0.5)
 	targetDot.Size = UDim2.fromOffset(6, 6)
-	targetDot.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+	targetDot.BackgroundColor3 = theme.accent
 	targetDot.BorderSizePixel = 0
 	targetDot.Visible = false
 	targetDot.Parent = screenGui
+	decorate(targetDot, 3)
 	local targetTracer = Instance.new("Frame")
 	targetTracer.Name = "TargetTracer"
 	targetTracer.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -517,15 +599,28 @@ do
 	local targetStats = Instance.new("TextLabel")
 	targetStats.Name = "TargetStats"
 	targetStats.Position = UDim2.fromOffset(20, 50)
-	targetStats.Size = UDim2.fromOffset(200, 30)
-	targetStats.BackgroundTransparency = 1
-	targetStats.TextColor3 = Color3.fromRGB(255, 255, 255)
-	targetStats.TextStrokeTransparency = 0
+	targetStats.Size = UDim2.fromOffset(220, 34)
+	targetStats.BackgroundColor3 = theme.background
+	targetStats.BackgroundTransparency = 0.1
+	targetStats.BorderSizePixel = 0
+	targetStats.TextColor3 = theme.text
+	targetStats.Font = Enum.Font.GothamBold
+	targetStats.TextSize = 12
+	targetStats.TextXAlignment = Enum.TextXAlignment.Left
 	targetStats.Visible = false
 	targetStats.Parent = screenGui
+	decorate(targetStats, 6, theme.border)
+	local statsPadding = Instance.new("UIPadding")
+	statsPadding.PaddingLeft = UDim.new(0, 12)
+	statsPadding.Parent = targetStats
+	stopStatsDrag = makeDraggable(targetStats, targetStats, function() return menuOpen end)
+	targetStats.Active = false
 	local targetHighlight = Instance.new("Highlight")
 	targetHighlight.Name = "AzureTargetHighlight"
 	targetHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	targetHighlight.FillColor = theme.accent
+	targetHighlight.OutlineColor = theme.text
+	targetHighlight.FillTransparency = 0.75
 	targetHighlight.Enabled = false
 	targetHighlight.Parent = screenGui
 
@@ -546,7 +641,7 @@ do
 		box.Parent = screenGui
 
 		local outline = Instance.new("UIStroke")
-		outline.Thickness = 2
+		outline.Thickness = 1.5
 		outline.Parent = box
 
 		local username = Instance.new("TextLabel")
@@ -554,10 +649,10 @@ do
 		username.BackgroundTransparency = 1
 		username.Position = UDim2.new(0, 0, 1, 2)
 		username.Size = UDim2.new(1, 0, 0, 18)
-		username.Font = Enum.Font.SourceSansBold
+		username.Font = Enum.Font.GothamBold
 		username.Text = targetPlayer.Name
 		username.TextColor3 = Color3.fromRGB(255, 255, 255)
-		username.TextSize = 14
+		username.TextSize = 12
 		username.TextStrokeTransparency = 0
 		username.Parent = box
 
@@ -566,9 +661,9 @@ do
 		distance.BackgroundTransparency = 1
 		distance.Position = UDim2.new(0, 0, 1, 20)
 		distance.Size = UDim2.new(1, 0, 0, 18)
-		distance.Font = Enum.Font.SourceSans
-		distance.TextColor3 = Color3.fromRGB(255, 255, 255)
-		distance.TextSize = 14
+		distance.Font = Enum.Font.Gotham
+		distance.TextColor3 = theme.text
+		distance.TextSize = 12
 		distance.TextStrokeTransparency = 0
 		distance.Parent = box
 
@@ -639,6 +734,9 @@ do
 		if key == keys.Menu then
 			menu.Visible = not menu.Visible
 			menuOpen = menu.Visible
+			targetStats.Active = menuOpen
+			stopMenuDrag()
+			stopStatsDrag()
 			if menuOpen then
 				leftHeld, mouseDown, lastTarget = false, false, nil
 			end
