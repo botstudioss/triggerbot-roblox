@@ -448,16 +448,18 @@ do
 		end
 	end
 
+	local keyHint = makeLabel(keySection, "Click a key to rebind. Escape cancels.", 145, 24)
 	for index, name in ipairs({"Camlock", "ESP", "Menu"}) do
 		local button = makeButton(keySection, 35 + (index - 1) * 32)
 		keyButtons[name] = button
 		button.MouseButton1Click:Connect(function()
 			waitingForKey = name
+			keyHint.Text = "Click a key to rebind. Escape cancels."
+			keyHint.TextColor3 = theme.muted
 			refreshKeyButtons()
 		end)
 	end
 	refreshKeyButtons()
-	makeLabel(keySection, "Click a key to rebind. Escape cancels.", 145, 24)
 
 	for _, name in ipairs({"Visible", "Hidden", "FOV"}) do
 		local section = name == "FOV" and fovColors or espColors
@@ -541,6 +543,7 @@ do
 	local predictionLabel = makeLabel(fovSection, "", 291)
 	local function updatePrediction()
 		predictionLabel.Text = "Prediction: " .. tostring(predictionTime) .. " sec"
+		predictionLabel.TextColor3 = theme.muted
 		predictionInput.Text = tostring(predictionTime)
 	end
 	updatePrediction()
@@ -548,7 +551,8 @@ do
 		local value = tonumber(predictionInput.Text)
 		if not value or value ~= value or value < 0 or value > 1 then
 			updatePrediction()
-			notify("Prediction", "Enter a number between 0 and 1 second.")
+			predictionLabel.Text = "Enter a number from 0 to 1 sec."
+			predictionLabel.TextColor3 = Color3.fromRGB(255, 115, 115)
 			return
 		end
 		predictionTime = value
@@ -781,6 +785,8 @@ do
 		if waitingForKey then
 			if key == Enum.KeyCode.Escape then
 				waitingForKey = nil
+				keyHint.Text = "Click a key to rebind. Escape cancels."
+				keyHint.TextColor3 = theme.muted
 			elseif key ~= Enum.KeyCode.Unknown then
 				local duplicate = false
 
@@ -791,14 +797,13 @@ do
 				end
 
 				if duplicate then
-					StarterGui:SetCore("SendNotification", {
-						Title = "Settings",
-						Text = "That key is already in use.",
-						Duration = 3
-					})
+					keyHint.Text = "That key is already in use."
+					keyHint.TextColor3 = Color3.fromRGB(255, 115, 115)
 				else
 					keys[waitingForKey] = key
 					waitingForKey = nil
+					keyHint.Text = "Click a key to rebind. Escape cancels."
+					keyHint.TextColor3 = theme.muted
 				end
 			end
 			refreshKeyButtons()
@@ -814,11 +819,6 @@ do
 			if menuOpen then
 				leftHeld, mouseDown, lastTarget = false, false, nil
 			end
-			StarterGui:SetCore("SendNotification", {
-				Title = "Settings",
-				Text = menu.Visible and "Settings opened" or "Settings closed",
-				Duration = 3
-			})
 		elseif key == keys.Camlock and camlockEnabled then
 			local message
 
@@ -842,12 +842,6 @@ do
 			if not enabled then
 				hideOverlays()
 			end
-
-			StarterGui:SetCore("SendNotification", {
-				Title = "ESP",
-				Text = enabled and "ESP enabled" or "ESP disabled",
-				Duration = 3
-			})
 		end
 	end)
 
