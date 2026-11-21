@@ -12,9 +12,11 @@ local lockedPlayer
 local function isVisible(targetPart, camera)
 	local direction = targetPart.Position - camera.CFrame.Position
 	if direction.Magnitude == 0 then return true end
+
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = {player.Character}
+
 	local hit = workspace:Raycast(camera.CFrame.Position, direction, params)
 	return not hit or hit.Instance:IsDescendantOf(targetPart.Parent)
 end
@@ -23,6 +25,7 @@ local function getTargetPart(targetPlayer)
 	if not targetPlayer or targetPlayer == player or targetPlayer.Parent ~= Players then
 		return nil
 	end
+
 	if IGNORE_TEAMMATES and player.Team and targetPlayer.Team == player.Team then
 		return nil
 	end
@@ -30,6 +33,7 @@ local function getTargetPart(targetPlayer)
 	local character = targetPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local head = character and character:FindFirstChild("Head")
+
 	if humanoid and humanoid.Health > 0 and head and head:IsA("BasePart") then
 		return head
 	end
@@ -103,6 +107,7 @@ do
 	screenGui.DisplayOrder = 2147483647
 	screenGui.IgnoreGuiInset = true
 	screenGui.ResetOnSpawn = false
+
 	if type(gethui) == "function" then
 		screenGui.Parent = assert(gethui(), "gethui() did not return a UI container")
 	else
@@ -143,6 +148,7 @@ do
 	title.TextSize = 15
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.ZIndex = 11
 	title.Parent = menu
 
 	local separator = Instance.new("Frame")
@@ -150,10 +156,12 @@ do
 	separator.Size = UDim2.new(1, -10, 0, 1)
 	separator.BackgroundColor3 = Color3.fromRGB(180, 180, 180)
 	separator.BorderSizePixel = 0
+	separator.ZIndex = 11
 	separator.Parent = menu
 
 	local pages = {}
 	local tabs = {}
+
 	for index, name in ipairs({"Aimbot", "Player", "Visuals"}) do
 		local page = Instance.new("Frame")
 		page.Name = name .. "Page"
@@ -161,6 +169,7 @@ do
 		page.Size = UDim2.new(1, -16, 1, -63)
 		page.BackgroundTransparency = 1
 		page.Visible = name == "Aimbot"
+		page.ZIndex = 11
 		page.Parent = menu
 		pages[name] = page
 
@@ -172,14 +181,18 @@ do
 		tab.Text = name
 		tab.Font = Enum.Font.Code
 		tab.TextSize = 15
-		tab.TextColor3 = name == "Aimbot" and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(155, 155, 155)
+		tab.TextColor3 = name == "Aimbot" and Color3.fromRGB(255, 255, 255)
+			or Color3.fromRGB(155, 155, 155)
+		tab.ZIndex = 11
 		tab.Parent = menu
 		tabs[name] = tab
+
 		tab.MouseButton1Click:Connect(function()
 			for pageName, otherPage in pairs(pages) do
 				otherPage.Visible = pageName == name
 				tabs[pageName].TextColor3 = pageName == name
-					and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(155, 155, 155)
+					and Color3.fromRGB(255, 255, 255)
+					or Color3.fromRGB(155, 155, 155)
 			end
 		end)
 	end
@@ -190,6 +203,7 @@ do
 		section.Size = UDim2.new(0, 236, 1, 0)
 		section.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 		section.BorderColor3 = Color3.fromRGB(60, 60, 60)
+		section.ZIndex = 12
 		section.Parent = page
 
 		local heading = Instance.new("TextLabel")
@@ -201,6 +215,7 @@ do
 		heading.TextXAlignment = Enum.TextXAlignment.Left
 		heading.Font = Enum.Font.Code
 		heading.TextSize = 14
+		heading.ZIndex = 13
 		heading.Parent = section
 
 		local line = Instance.new("Frame")
@@ -208,7 +223,9 @@ do
 		line.Size = UDim2.new(1, -16, 0, 1)
 		line.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
 		line.BorderSizePixel = 0
+		line.ZIndex = 13
 		line.Parent = section
+
 		return section
 	end
 
@@ -230,6 +247,7 @@ do
 		label.TextWrapped = true
 		label.Font = Enum.Font.Code
 		label.TextSize = 14
+		label.ZIndex = 13
 		label.Parent = parent
 		return label
 	end
@@ -247,6 +265,7 @@ do
 		button.TextColor3 = Color3.fromRGB(220, 220, 220)
 		button.Font = Enum.Font.Code
 		button.TextSize = 14
+		button.ZIndex = 13
 		button.Parent = parent
 		return button
 	end
@@ -268,13 +287,15 @@ do
 	refreshKeyButtons()
 	makeLabel(keySection, "Click a key to rebind it. Escape cancels.", 145, 50)
 
-	for index, name in ipairs({"Visible", "Hidden", "FOV"}) do
+	for _, name in ipairs({"Visible", "Hidden", "FOV"}) do
 		local section = name == "FOV" and fovColors or espColors
 		local y = name == "Hidden" and 67 or 35
 		local button = makeButton(section, y)
+
 		local function refreshColorButton()
 			button.Text = name .. " color: " .. palette[colorIndexes[name]].Name
 		end
+
 		refreshColorButton()
 		button.MouseButton1Click:Connect(function()
 			colorIndexes[name] = colorIndexes[name] % #palette + 1
@@ -283,16 +304,19 @@ do
 	end
 
 	local radiusLabel = makeLabel(fovSection, "", 35)
+
 	local function updateRadius()
 		radiusLabel.Text = "FOV radius: " .. fovRadius
 	end
 	updateRadius()
+
 	local decrease = makeButton(fovSection, 66, 104, 8)
 	decrease.Text = "-"
 	decrease.MouseButton1Click:Connect(function()
 		fovRadius = math.max(25, fovRadius - 25)
 		updateRadius()
 	end)
+
 	local increase = makeButton(fovSection, 66, 104, 124)
 	increase.Text = "+"
 	increase.MouseButton1Click:Connect(function()
@@ -336,7 +360,11 @@ do
 		distance.TextStrokeTransparency = 0
 		distance.Parent = box
 
-		overlays[targetPlayer] = {box = box, outline = outline, distance = distance}
+		overlays[targetPlayer] = {
+			box = box,
+			outline = outline,
+			distance = distance
+		}
 	end
 
 	local function removePlayer(targetPlayer)
@@ -356,6 +384,7 @@ do
 	UserInputService.InputBegan:Connect(function(input)
 		if UserInputService:GetFocusedTextBox() then return end
 		if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
 		local key = input.KeyCode
 
 		if waitingForKey then
@@ -363,11 +392,13 @@ do
 				waitingForKey = nil
 			elseif key ~= Enum.KeyCode.Unknown then
 				local duplicate = false
+
 				for name, existing in pairs(keys) do
 					if name ~= waitingForKey and existing == key then
 						duplicate = true
 					end
 				end
+
 				if duplicate then
 					StarterGui:SetCore("SendNotification", {
 						Title = "Settings",
@@ -392,6 +423,7 @@ do
 			})
 		elseif key == keys.Camlock then
 			local message
+
 			if lockedPlayer then
 				message = "Unlocked from " .. lockedPlayer.Name
 				lockedPlayer = nil
@@ -400,6 +432,7 @@ do
 				message = lockedPlayer and ("Locked onto " .. lockedPlayer.Name)
 					or "No visible player in FOV"
 			end
+
 			StarterGui:SetCore("SendNotification", {
 				Title = "Camlock",
 				Text = message,
@@ -407,11 +440,13 @@ do
 			})
 		elseif key == keys.ESP then
 			enabled = not enabled
+
 			if not enabled then
 				for _, overlay in pairs(overlays) do
 					overlay.box.Visible = false
 				end
 			end
+
 			StarterGui:SetCore("SendNotification", {
 				Title = "ESP",
 				Text = enabled and "ESP enabled" or "ESP disabled",
@@ -425,6 +460,7 @@ do
 		circle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
 		circle.Size = UDim2.fromOffset(fovRadius * 2, fovRadius * 2)
 		circleOutline.Color = palette[colorIndexes.FOV].Value
+
 		if not enabled then return end
 
 		local camera = workspace.CurrentCamera
@@ -432,6 +468,7 @@ do
 			local box = overlay.box
 			local character = targetPlayer.Character
 			local targetPart = getTargetPart(targetPlayer)
+
 			if camera and character and character.Parent and targetPart then
 				local center, size = character:GetBoundingBox()
 				local minX, minY = math.huge, math.huge
@@ -442,9 +479,12 @@ do
 					for y = -1, 1, 2 do
 						for z = -1, 1, 2 do
 							local corner = center:PointToWorldSpace(Vector3.new(
-								size.X * x / 2, size.Y * y / 2, size.Z * z / 2
+								size.X * x / 2,
+								size.Y * y / 2,
+								size.Z * z / 2
 							))
 							local point = camera:WorldToViewportPoint(corner)
+
 							if point.Z <= 0 then
 								inFront = false
 							else
@@ -460,11 +500,14 @@ do
 				local viewport = camera.ViewportSize
 				box.Visible = inFront and maxX >= 0 and maxY >= 0
 					and minX <= viewport.X and minY <= viewport.Y
+
 				if box.Visible then
 					box.Position = UDim2.fromOffset(minX, minY)
 					box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
+
 					local colorName = isVisible(targetPart, camera) and "Visible" or "Hidden"
 					overlay.outline.Color = palette[colorIndexes[colorName]].Value
+
 					local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 					local origin = localRoot and localRoot.Position or camera.CFrame.Position
 					local targetRoot = character:FindFirstChild("HumanoidRootPart")
@@ -540,6 +583,7 @@ end
 local function isGun(tool)
 	if not tool or not tool:IsA("Tool") then return false end
 	if WHITELISTED_TOOLS[tool.Name] then return true end
+
 	for _, child in ipairs(tool:GetChildren()) do
 		if child:IsA("Script") or child:IsA("LocalScript") then
 			if string.match(child.Name:lower(), "gun") then
@@ -557,6 +601,7 @@ local function isGun(tool)
 			end
 		end
 	end
+
 	local handle = tool:FindFirstChild("Handle")
 	if handle then
 		for _, sound in ipairs(handle:GetDescendants()) do
@@ -573,6 +618,7 @@ local function scanAllToolsSafely()
 	for _, service in ipairs(game:GetChildren()) do
 		table.insert(allObjects, service)
 	end
+
 	local index = 1
 	local batchSize = 20
 	local found = false
@@ -583,14 +629,17 @@ local function scanAllToolsSafely()
 			local obj = allObjects[index]
 			index = index + 1
 			processed = processed + 1
+
 			if obj:IsA("Tool") and isGun(obj) then
 				found = true
 				return
 			end
+
 			for _, child in ipairs(obj:GetChildren()) do
 				table.insert(allObjects, child)
 			end
 		end
+
 		if not found and index <= #allObjects then
 			RunService.Heartbeat:Wait()
 			task.spawn(scanBatch)
@@ -604,10 +653,12 @@ end
 
 local function attemptLocalFire()
 	if not AUTO_SHOOT_ENABLED or isCrouching then return false end
+
 	local tool = getEquippedTool()
 	if tool and isGun(tool) and canShoot then
 		canShoot = false
 		autoFired = true
+
 		pcall(function()
 			tool:Activate()
 			if tool:IsA("Tool") and tool:FindFirstChildOfClass("RemoteEvent") == nil then
@@ -621,6 +672,7 @@ local function attemptLocalFire()
 				tool:Deactivate()
 			end
 		end)
+
 		local delayTime = shotDelays[math.random(1, #shotDelays)]
 		task.delay(delayTime, function()
 			canShoot = true
@@ -632,14 +684,18 @@ end
 
 local function isRagdolled(model)
 	if not model or not model:IsA("Model") then return true end
+
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return true end
 	if humanoid.Health <= 0 then return true end
+
 	local ok, state = pcall(function() return humanoid:GetState() end)
 	if ok and (state == Enum.HumanoidStateType.Physics or state == Enum.HumanoidStateType.Dead or state == Enum.HumanoidStateType.FallingDown) then
 		return true
 	end
+
 	if humanoid.PlatformStand == true then return true end
+
 	local possibleFlagNames = {"Ragdolled","Ragdoll","IsRagdolled","RagdollFlag","RagdollState"}
 	for _, name in ipairs(possibleFlagNames) do
 		local v = model:FindFirstChild(name)
@@ -651,6 +707,7 @@ local function isRagdolled(model)
 			end
 		end
 	end
+
 	local foundMotor6D = false
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("Motor6D") then
@@ -658,6 +715,7 @@ local function isRagdolled(model)
 			break
 		end
 	end
+
 	if not foundMotor6D then
 		return true
 	end
@@ -666,10 +724,13 @@ end
 
 local function isValidTarget(instance)
 	if not instance then return false end
+
 	local model = instance:FindFirstAncestorOfClass("Model")
 	if not model then return false end
+
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	if not humanoid then return false end
+
 	local targetPlayer = Players:GetPlayerFromCharacter(model)
 	if not targetPlayer or isFriendly(targetPlayer) then return false end
 	if isRagdolled(model) then return false end
@@ -678,20 +739,24 @@ end
 
 local function handleMouseMovement()
 	if not leftHeld or isCrouching then return end
+
 	local tool = getEquippedTool()
 	if not tool or not isGun(tool) then
 		leftHeld = false
 		lastTarget = nil
 		return
 	end
+
 	local origin = workspace.CurrentCamera.CFrame.Position
 	local direction = (mouse.Hit.Position - origin).Unit * 1000
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Blacklist
 	params.FilterDescendantsInstances = { player.Character }
+
 	local result = workspace:Raycast(origin, direction, params)
 	if result and isValidTarget(result.Instance) then
 		local distance = (result.Position - origin).Magnitude
+
 		if tool.Name:lower():find("revolver") and distance > 200 then
 			lastTarget = nil
 			return
@@ -699,6 +764,7 @@ local function handleMouseMovement()
 			lastTarget = nil
 			return
 		end
+
 		if result.Instance ~= lastTarget then
 			lastTarget = result.Instance
 			attemptLocalFire()
@@ -718,6 +784,7 @@ local function blockLeftClick(actionName, inputState)
 		mouseDown = true
 		holdStartTime = tick()
 		autoFired = false
+
 		if gunEquipped and not isCrouching then
 			leftHeld = true
 			return Enum.ContextActionResult.Sink
@@ -726,6 +793,7 @@ local function blockLeftClick(actionName, inputState)
 		mouseDown = false
 		leftHeld = false
 		lastTarget = nil
+
 		local heldTime = tick() - holdStartTime
 		if gunEquipped and heldTime < holdThreshold and not isCrouching and not autoFired then
 			attemptLocalFire()
@@ -775,6 +843,7 @@ local function setupCharacter(char)
 			end
 		end
 	end)
+
 	char.ChildRemoved:Connect(function(child)
 		if child:IsA("Tool") then
 			lastTarget = nil
