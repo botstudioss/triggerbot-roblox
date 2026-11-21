@@ -50,7 +50,7 @@ Instance = {new = function(class)
 end}
 local function find(class, name)
 	for _, object in ipairs(objects) do
-		if object.class == class and (object.Name == name or object.Text == name) then return object end
+		if not object.destroyed and object.class == class and (object.Name == name or object.Text == name) then return object end
 	end
 	error("Missing " .. class .. " " .. name)
 end
@@ -671,8 +671,9 @@ equipped = weapon("[Revolver]")
 heldShot()
 assert(shots == 4)
 
+local targetTracer = find("Frame", "Tracer")
 players.PlayerRemoving:fire(target)
-assert(box.destroyed and find("Frame", "Tracer").destroyed)
+assert(box.destroyed and targetTracer.destroyed)
 for index = 2, #titles do assert(titles[index] == "Camlock") end
 
 local configStatus = find("TextLabel", "ConfigStatus")
@@ -686,18 +687,26 @@ local function copy(value)
 	for key, item in pairs(value) do result[key] = copy(item) end
 	return result
 end
-local saved, files
-files = {}
+local saved, files, documents, serial
+files, documents, serial = {}, {}, 0
 services.HttpService = {
-	JSONEncode = function(_, value) saved = copy(value); return "valid json" end,
+	JSONEncode = function(_, value)
+		serial = serial + 1
+		saved = copy(value)
+		local encoded = "json-" .. serial
+		documents[encoded] = saved
+		return encoded
+	end,
 	JSONDecode = function(_, value)
-		assert(value == "valid json", "bad json")
-		return copy(saved)
+		assert(documents[value], "bad json")
+		return copy(documents[value])
 	end,
 }
 writefile = function(path, value) files[path] = value end
 readfile = function(path) assert(files[path], "file missing"); return files[path] end
+isfile = function(path) return files[path] ~= nil end
 local filename = paidScript and "Azure_Paid_Config.json" or "Azure_Public_Config.json"
+local configName = find("TextBox", "ConfigName")
 prediction.Text = "0.37"
 prediction.FocusLost:fire()
 local targetsInput = find("TextBox", "ESPTargetsInput")
@@ -705,7 +714,14 @@ targetsInput.Text = "Target,Example"
 targetsInput.FocusLost:fire()
 click("[ ] Speed")
 click("Save config")
-assert(files[filename] == "valid json", "Config should be saved to the version-specific file")
+assert(files[filename] and saved.profiles.Default, "Config should be saved to the version-specific file")
+documents.legacy = copy(saved.profiles.Default)
+files[filename] = "legacy"
+click("Refresh list")
+click("Default")
+click("Load config")
+click("Save config")
+assert(saved.version == 2 and saved.profiles.Default, "Legacy config should migrate without losing its settings")
 prediction.Text = "0.8"
 prediction.FocusLost:fire()
 targetsInput.Text = "Other"
@@ -721,6 +737,11 @@ else
 end
 click("Speed key: F")
 press("G")
+configName.Text = "Second"
+click("Save config")
+assert(saved.profiles.Default and saved.profiles.Second)
+click("Refresh list")
+click("Default")
 click("Load config")
 assert(prediction.Text == "0.37" and targetsInput.Text == "Target,Example")
 assert(find("TextButton", "Speed key: F"))
@@ -728,12 +749,20 @@ run.Heartbeat:fire(0.1)
 assert(humanoid.WalkSpeed == 200)
 press("F")
 assert(humanoid.WalkSpeed == 16)
+click("Second")
+assert(prediction.Text == "0.37", "Selecting a config must not load it automatically")
+click("Load config")
+assert(prediction.Text == "0.8" and targetsInput.Text == "Other")
+click("Default")
+click("Load config")
+press("F")
 click("[x] Silent wall check")
 click("[x] Silent team check")
 click("Method: Mouse")
 click("Method: Raycast")
 click("[ ] Silent aim")
 click("Save config")
+assert(saved.profiles.Second, "Overwriting one config must preserve the others")
 click("Method: Z ZHD")
 click("[ ] Silent wall check")
 click("[ ] Silent team check")
@@ -746,14 +775,21 @@ prediction.Text = "0.9"
 prediction.FocusLost:fire()
 click("Load config")
 assert(prediction.Text == "0.9" and configStatus.Text:lower():find("error", 1, true))
-files[filename] = "valid json"
-saved.values["camlock/prediction"] = 2
+click("Save config")
+assert(files[filename] == "invalid json" and configStatus.Text:lower():find("error", 1, true))
+files[filename] = "json-" .. serial
+saved.profiles.Default.values["camlock/prediction"] = 2
 click("Load config")
 assert(prediction.Text == "0.9" and configStatus.Text:lower():find("invalid", 1, true))
-saved.values["camlock/prediction"] = 0.37
-saved.values.keybinds.Speed = saved.values.keybinds.ESP
+saved.profiles.Default.values["camlock/prediction"] = 0.37
+saved.profiles.Default.values.keybinds.Speed = saved.profiles.Default.values.keybinds.ESP
 click("Load config")
 assert(prediction.Text == "0.9" and find("TextButton", "Speed key: F"))
+configName.Text = "../invalid"
+local previousFile = files[filename]
+click("Save config")
+assert(files[filename] == previousFile and configStatus.Text:lower():find("name", 1, true))
+configName.Text = "Default"
 writefile = function() error("disk full") end
 click("Save config")
 assert(configStatus.Text:lower():find("error", 1, true))

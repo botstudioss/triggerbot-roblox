@@ -572,10 +572,39 @@ do
 	local config = (function()
 		local registry, entries = {}, {}
 		local api = {}
-		local section = makeSection(pageContents.Config, "Config", 0, 245)
-		local status = makeLabel(section, "Save/load settings on this device.", 110, 125)
+		local section = makeSection(pageContents.Config, "Config", 0, 325)
+		local savedSection = makeSection(pageContents.Config, "Saved configs", 248, 325)
+		local status = makeLabel(section, "Select a saved config or enter a name.", 170, 140)
 		status.Name = "ConfigStatus"
 		local filename = "Azure_Public_Config.json"
+		local nameInput = Instance.new("TextBox")
+		nameInput.Name = "ConfigName"
+		nameInput.Position = UDim2.fromOffset(8, compact(35))
+		nameInput.Size = UDim2.fromOffset(220, 20)
+		nameInput.BackgroundColor3 = theme.control
+		nameInput.BorderSizePixel = 0
+		nameInput.TextColor3 = theme.text
+		nameInput.PlaceholderColor3 = theme.muted
+		nameInput.PlaceholderText = "Config name"
+		nameInput.ClearTextOnFocus = false
+		nameInput.Text = "Default"
+		nameInput.Font = Enum.Font.Code
+		nameInput.TextSize = 12
+		nameInput.ZIndex = 14
+		nameInput.Parent = section
+		decorate(nameInput, 0, theme.border)
+		local list = Instance.new("ScrollingFrame")
+		list.Name = "ConfigList"
+		list.Position = UDim2.fromOffset(8, 25)
+		list.Size = UDim2.new(1, -16, 1, -33)
+		list.BackgroundTransparency = 1
+		list.BorderSizePixel = 0
+		list.ScrollBarThickness = 4
+		list.ScrollBarImageColor3 = theme.border
+		list.ScrollingDirection = Enum.ScrollingDirection.Y
+		list.ZIndex = 14
+		list.Parent = savedSection
+		local listButtons = {}
 
 		local function finite(value, seen)
 			if type(value) == "number" then return value == value and value ~= math.huge and value ~= -math.huge end
@@ -619,21 +648,74 @@ do
 			status.Text = message
 			status.TextColor3 = ok and theme.muted or Color3.fromRGB(255, 115, 115)
 		end
+		local function validName(name)
+			return type(name) == "string" and #name > 0 and #name <= 32
+				and name:match("^[%w_ %-]+$") ~= nil and name:match("^%s") == nil and name:match("%s$") == nil
+		end
+		local function selectedName()
+			local name = nameInput.Text:match("^%s*(.-)%s*$")
+			assert(validName(name), "Name must be 1-32 letters, numbers, spaces, underscores or hyphens.")
+			return name
+		end
+		local function readProfiles()
+			assert(type(isfile) == "function", "isfile is unavailable.")
+			local exists = isfile(filename)
+			assert(type(exists) == "boolean", "isfile returned an invalid result.")
+			if not exists then return {} end
+			assert(type(readfile) == "function", "readfile is unavailable.")
+			local data = game:GetService("HttpService"):JSONDecode(readfile(filename))
+			assert(type(data) == "table", "Invalid config file.")
+			if data.version == 1 and type(data.values) == "table" then return {Default = data} end
+			assert(data.version == 2 and type(data.profiles) == "table", "Invalid config file or version.")
+			for name, profile in pairs(data.profiles) do
+				assert(validName(name) and type(profile) == "table" and profile.version == 1
+					and type(profile.values) == "table", "Invalid saved config: " .. tostring(name))
+			end
+			return data.profiles
+		end
+		local function renderProfiles(profiles)
+			for _, button in ipairs(listButtons) do button:Destroy() end
+			listButtons = {}
+			local names = {}
+			for name in pairs(profiles) do table.insert(names, name) end
+			table.sort(names)
+			for index, name in ipairs(names) do
+				local button = makeButton(list, (index - 1) * 32, 205, 0)
+				button.Name = "ConfigItem:" .. name
+				button.Text = name
+				button.BackgroundColor3 = nameInput.Text == name and theme.active or theme.control
+				button.MouseButton1Click:Connect(function()
+					nameInput.Text = name
+					renderProfiles(profiles)
+					report(true, "Selected " .. name .. ". Click Load config.")
+				end)
+				table.insert(listButtons, button)
+			end
+			list.CanvasSize = UDim2.fromOffset(0, #names * 24)
+		end
 		local function save()
 			assert(type(writefile) == "function", "writefile is unavailable.")
+			local name = selectedName()
+			local profiles = readProfiles()
 			local values = {}
 			for _, entry in ipairs(entries) do
 				local value = entry.get()
 				assert(valid(entry, value), "Invalid current value: " .. entry.id)
 				values[entry.id] = value
 			end
-			local json = game:GetService("HttpService"):JSONEncode({version = 1, values = values})
+			profiles[name] = {version = 1, values = values}
+			local json = game:GetService("HttpService"):JSONEncode({version = 2, profiles = profiles})
 			local result = writefile(filename, json)
 			assert(result ~= false, "writefile returned false.")
+			nameInput.Text = name
+			renderProfiles(profiles)
+			return name
 		end
 		local function load()
-			assert(type(readfile) == "function", "readfile is unavailable.")
-			local data = game:GetService("HttpService"):JSONDecode(readfile(filename))
+			local name = selectedName()
+			local profiles = readProfiles()
+			local data = profiles[name]
+			assert(data, "No saved config named " .. name .. ".")
 			assert(type(data) == "table" and data.version == 1 and type(data.values) == "table", "Invalid config format or version.")
 			for id, value in pairs(data.values) do
 				local entry = registry[id]
@@ -672,19 +754,33 @@ do
 			end
 			local ok, err = apply(silent, desiredSilent)
 			assert(ok, "Could not apply " .. tostring(err) .. "; load partially applied.")
+			nameInput.Text = name
+			renderProfiles(profiles)
+			return name
 		end
-		local saveButton = makeButton(section, 35)
+		local saveButton = makeButton(section, 75)
 		saveButton.Name, saveButton.Text = "ConfigSave", "Save config"
 		saveButton.MouseButton1Click:Connect(function()
 			local ok, err = pcall(save)
-			report(ok, ok and ("Saved " .. filename) or ("Save error: " .. tostring(err)))
+			report(ok, ok and ("Saved " .. err) or ("Save error: " .. tostring(err)))
 		end)
-		local loadButton = makeButton(section, 70)
+		local loadButton = makeButton(section, 110)
 		loadButton.Name, loadButton.Text = "ConfigLoad", "Load config"
 		loadButton.MouseButton1Click:Connect(function()
 			local ok, err = pcall(load)
-			report(ok, ok and ("Loaded " .. filename) or ("Load error: " .. tostring(err)))
+			report(ok, ok and ("Loaded " .. err) or ("Load error: " .. tostring(err)))
 		end)
+		local refreshButton = makeButton(section, 145)
+		refreshButton.Name, refreshButton.Text = "ConfigRefresh", "Refresh list"
+		refreshButton.MouseButton1Click:Connect(function()
+			local ok, result = pcall(readProfiles)
+			if ok then renderProfiles(result) end
+			report(ok, ok and "Saved configs refreshed." or ("Refresh error: " .. tostring(result)))
+		end)
+		do
+			local ok, result = pcall(readProfiles)
+			if ok then renderProfiles(result) else report(false, "Config list error: " .. tostring(result)) end
+		end
 		return api
 	end)()
 

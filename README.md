@@ -10,10 +10,13 @@ In **Player > Movement**, set speed from 0 to 200 studs per second and toggle
 it with G by default. The speed key can be rebound in the same section. Games
 may override or reject client-side speed changes.
 
-Use the **Config** tab to save and load settings on the current device. The
-executor must provide `writefile` and `readfile`; errors are shown in the menu.
+In the **Config** tab, enter a name and save, or select a saved config on the
+right and click Load. Saving an existing name replaces that config. Use Refresh
+list to reload the saved names. The executor must provide `isfile`, `writefile`
+and `readfile`; errors are shown in the menu.
 The files are `Azure_Public_Config.json` and `Azure_Paid_Config.json` in the
-executor's file workspace. Loading may partially apply settings if a feature
+executor's file workspace. Existing single configs appear as `Default`.
+Loading may partially apply settings if a feature
 cannot be enabled in the current game or executor.
 
 The **Aim modes** tab adds a separate camera aimbot and experimental Silent Aim.
