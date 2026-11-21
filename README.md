@@ -5,6 +5,7 @@ By default, Q toggles camlock, T toggles ESP, and Right Shift opens the
 settings menu. These keys can be rebound in the Aimbot tab.
 Drag the menu by its title bar to reposition it. When target stats are visible,
 they can also be dragged while the menu is open.
+Green squares indicate enabled options; click an option to toggle it.
 
 The scrollable settings pages include team and wall checks, aim prediction,
 target indicators, ESP styles, movement controls, and camera and lighting

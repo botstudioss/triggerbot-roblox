@@ -46,7 +46,21 @@ local function find(class, name)
 	end
 	error("Missing " .. class .. " " .. name)
 end
-local function click(name) find("TextButton", name).MouseButton1Click:fire() end
+local function click(name)
+	local state, toggleName = name:match("^%[(.)%] (.+)$")
+	local button
+	if state then
+		button = find("TextButton", toggleName .. "Toggle")
+		local indicator
+		for _, object in ipairs(objects) do
+			if object.Parent == button and object.Name == "ToggleIndicator" then indicator = object end
+		end
+		assert(indicator and (indicator.BackgroundColor3[2] > 200) == (state == "x"), "Unexpected toggle state: " .. name)
+	else
+		button = find("TextButton", name)
+	end
+	button.MouseButton1Click:fire()
+end
 local input = {
 	InputBegan = event(), InputEnded = event(), InputChanged = event(),
 	GetFocusedTextBox = function() end, GetMouseLocation = function() return vec(0, 0) end,
@@ -107,6 +121,17 @@ local function press(key) input.InputBegan:fire({UserInputType = "Keyboard", Key
 local function runScheduled() while #scheduled > 0 do table.remove(scheduled, 1)() end end
 
 dofile("Triggerbot.lua")
+local menuFrame = find("Frame", "Settings")
+local aimingPage, visualsPage = find("Frame", "AimbotPage"), find("Frame", "VisualsPage")
+find("TextButton", "VisualsTab").MouseButton1Click:fire()
+assert(visualsPage.Visible and not aimingPage.Visible)
+find("TextButton", "AimbotTab").MouseButton1Click:fire()
+assert(aimingPage.Visible and not visualsPage.Visible)
+local fovToggle = find("TextButton", "FOVToggle")
+assert(fovToggle.Position[2] + fovToggle.Size[2] < menuFrame.Size[2] - 61)
+local inputBox = find("TextBox", "PredictionInput")
+assert(inputBox.Position[2] + inputBox.Size[2] <= inputBox.Parent.Size[2])
+assert(inputBox.Parent.Size[2] <= inputBox.Parent.Parent.CanvasSize[2])
 press("Q")
 assert(messages[#messages] == "No eligible player in FOV")
 click("[x] Wall check")
@@ -129,9 +154,9 @@ press("Q")
 assert(messages[#messages] == "Locked onto Target")
 click("[ ] Prediction")
 local section = find("TextLabel", "Camera Aimbot").Parent
-for _, object in ipairs(objects) do
-	if object.Parent == section and object.Text == "+" and object.Position[2] == 317 then object.MouseButton1Click:fire() end
-end
+local predictionIncrease = find("TextButton", "PredictionIncrease")
+assert(predictionIncrease.Parent == section)
+predictionIncrease.MouseButton1Click:fire()
 run.render()
 assert(camera.CFrame.target.X == 20.5)
 local prediction = find("TextBox", "PredictionInput")
