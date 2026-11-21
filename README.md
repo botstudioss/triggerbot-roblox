@@ -21,6 +21,13 @@ work. Unsupported hook APIs are reported in the menu.
 Some Xeno versions may lack these APIs; the menu identifies the missing one
 and keeps Silent Aim off rather than claiming it is working.
 
+In **Visuals > ESP filters**, enable the distance limit and enter the maximum
+distance in studs (1–100000). Enable **ESP named only** to show only players
+listed in **Target usernames**. Enter comma-separated Roblox usernames, not
+display names; matching ignores case. **Hidden usernames** always hides those
+players from ESP, even if they are targeted. Clear a list to remove its entries.
+The existing team check still applies, and these filters affect ESP only.
+
 The Silent Aim hook approach is adapted from
 [Averiias/Universal-SilentAim](https://github.com/Averiias/Universal-SilentAim),
 licensed under MIT; the license notice is included in `Triggerbot.lua`.

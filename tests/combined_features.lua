@@ -21,6 +21,12 @@ UDim = {new = function(...) return {...} end}
 UDim2 = {new = function(...) return {...} end, fromOffset = function(...) return {...} end, fromScale = function(...) return {...} end}
 Color3 = {fromRGB = function(...) return {...} end, fromHSV = function(...) return {...} end}
 math.atan2 = math.atan2 or math.atan
+math.clamp = math.clamp or function(value, minimum, maximum)
+	return math.max(minimum, math.min(value, maximum))
+end
+table.find = table.find or function(values, value)
+	for index, item in ipairs(values) do if item == value then return index end end
+end
 local codes = {}
 for _, key in ipairs({"Q", "T", "E", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
 	codes[key] = {Name = key}
@@ -106,7 +112,7 @@ local run = {RenderStepped = event(), Heartbeat = event()}
 function run:BindToRenderStep(_, _, callback) self.render = callback end
 local messages, titles = {}, {}
 local blockClick
-local lighting = {GlobalShadows = true, FogStart = 20, FogEnd = 1000}
+local lighting = {GlobalShadows = true, FogStart = 20, FogEnd = 1000, FogColor = {1, 1, 1}}
 local services = {
 	Players = players, RunService = run, UserInputService = input, Lighting = lighting,
 	StarterGui = {SetCore = function(_, _, message)
@@ -135,10 +141,13 @@ workspace = {
 local function press(key) input.InputBegan:fire({UserInputType = "Keyboard", KeyCode = codes[key]}, false) end
 local function runScheduled() while #scheduled > 0 do table.remove(scheduled, 1)() end end
 
-dofile("Triggerbot.lua")
+local paidScript = TEST_SCRIPT == "Triggerbot_2.lua"
+dofile(TEST_SCRIPT or "Triggerbot.lua")
 assert(#messages == 1 and titles[1] == "Notification")
 local menuFrame = find("Frame", "Settings")
-assert(find("TextLabel", "DragHandle").Text == "Azure | discord.gg/azuremodded")
+assert(find("TextLabel", "DragHandle").Text == (paidScript
+	and "Azure Paid | @socialdw on discord | discord.gg/azuremodded"
+	or "Azure | discord.gg/azuremodded"))
 local aimingPage, visualsPage = find("Frame", "AimbotPage"), find("Frame", "VisualsPage")
 find("TextButton", "VisualsTab").MouseButton1Click:fire()
 assert(visualsPage.Visible and not aimingPage.Visible)
@@ -426,6 +435,67 @@ for _, object in ipairs(objects) do
 end
 assert(box.Visible and not outline.Enabled and not username.Visible and not distance.Visible)
 assert(find("Frame", "Tracer").Visible)
+
+local filterSection = find("TextLabel", "ESP filters").Parent
+assert(filterSection.Position[2] + filterSection.Size[2] <= filterSection.Parent.CanvasSize[2])
+local distanceInput = find("TextBox", "ESPDistanceInput")
+local targetsInput = find("TextBox", "ESPTargetsInput")
+local whitelistInput = find("TextBox", "ESPWhitelistInput")
+local filterStatus = find("TextLabel", "ESPFilterStatus")
+for _, field in ipairs({distanceInput, targetsInput, whitelistInput}) do
+	assert(field.Position[2] + field.Size[2] <= filterSection.Size[2])
+end
+distanceInput.Text = "50"
+distanceInput.FocusLost:fire()
+click("[ ] ESP distance limit")
+root.Position = vec(head.Position.X - 50, head.Position.Y, head.Position.Z)
+run.RenderStepped:fire()
+assert(box.Visible and find("Frame", "Tracer").Visible)
+root.Position = vec(head.Position.X - 50.01, head.Position.Y, head.Position.Z)
+run.RenderStepped:fire()
+assert(not box.Visible and not find("Frame", "Tracer").Visible)
+distanceInput.Text = "1e309"
+distanceInput.FocusLost:fire()
+assert(distanceInput.Text == "50" and filterStatus.Text ~= "")
+click("[x] ESP distance limit")
+click("[ ] ESP named only")
+run.RenderStepped:fire()
+assert(not box.Visible)
+local otherTarget = {Name = "OtherPlayer", Team = "Red", Parent = players, Character = targetCharacter}
+players.PlayerAdded:fire(otherTarget)
+local otherBox = find("Frame", "OtherPlayer")
+targetsInput.Text = " somebody, TARGET "
+targetsInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(box.Visible and not otherBox.Visible)
+whitelistInput.Text = "target"
+whitelistInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(not box.Visible and not find("Frame", "Tracer").Visible)
+whitelistInput.Text = ""
+whitelistInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(box.Visible)
+targetsInput.Text = "invalid name"
+targetsInput.FocusLost:fire()
+assert(targetsInput.Text == " somebody, TARGET " and filterStatus.Text ~= "")
+run.RenderStepped:fire()
+assert(box.Visible)
+targetsInput.Text = ""
+targetsInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(not box.Visible)
+click("[x] ESP named only")
+run.RenderStepped:fire()
+assert(box.Visible and otherBox.Visible)
+whitelistInput.Text = "OTHERPLAYER"
+whitelistInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(box.Visible and not otherBox.Visible)
+whitelistInput.Text = ""
+whitelistInput.FocusLost:fire()
+players.PlayerRemoving:fire(otherTarget)
+
 click("[ ] Crosshair")
 assert(find("Frame", "Crosshair").Visible)
 click("[ ] Camera FOV")

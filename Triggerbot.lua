@@ -420,7 +420,7 @@ do
 		content.Size = UDim2.new(1, 0, 1, 0)
 		content.BackgroundTransparency = 1
 		content.BorderSizePixel = 0
-		content.CanvasSize = UDim2.fromOffset(0, 358)
+		content.CanvasSize = UDim2.fromOffset(0, name == "Visuals" and 485 or 358)
 		content.ScrollBarThickness = 4
 		content.ScrollBarImageColor3 = theme.border
 		content.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -455,9 +455,9 @@ do
 		return math.floor(y * 0.75)
 	end
 
-	local function makeSection(page, name, x, height)
+	local function makeSection(page, name, x, height, y)
 		local section = Instance.new("Frame")
-		section.Position = UDim2.fromOffset(x, 0)
+		section.Position = UDim2.fromOffset(x, y or 0)
 		section.Size = UDim2.fromOffset(236, compact(height))
 		section.BackgroundColor3 = theme.surface
 		section.BorderSizePixel = 0
@@ -493,6 +493,7 @@ do
 	local teamSection = makeSection(pageContents.Player, "Player", 0, 185)
 	local visibilitySection = makeSection(pageContents.Player, "Movement", 248, 166)
 	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0, 300)
+	local espFilters = makeSection(pageContents.Visuals, "ESP filters", 0, 325, 233)
 	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248, 262)
 	local aimSection = makeSection(pageContents["Aim modes"], "Camera aimbot", 0, 476)
 	local silentSection = makeSection(pageContents["Aim modes"], "Silent aim", 248, 476)
@@ -874,6 +875,70 @@ do
 	makeToggle(espColors, 233, "Tracers", false, function(value) showTracers = value end)
 	makeToggle(espColors, 265, "Rainbow ESP", false, function(value) rainbowESP = value end)
 
+	local espDistanceLimit, espMaxDistance = false, 500
+	local espNamedOnly, espTargets, espWhitelist = false, {}, {}
+	local espFilterStatus = makeLabel(espFilters, "", 276, 45)
+	espFilterStatus.Name = "ESPFilterStatus"
+	local function filterInput(name, y, placeholder)
+		local input = Instance.new("TextBox")
+		input.Name = name
+		input.Position = UDim2.fromOffset(8, compact(y))
+		input.Size = UDim2.fromOffset(220, 20)
+		input.BackgroundColor3 = theme.control
+		input.BorderSizePixel = 0
+		input.TextColor3 = theme.text
+		input.PlaceholderColor3 = theme.muted
+		input.PlaceholderText = placeholder
+		input.ClearTextOnFocus = false
+		input.Text = ""
+		input.Font = Enum.Font.Code
+		input.TextSize = 12
+		input.ZIndex = 14
+		input.Parent = espFilters
+		decorate(input, 0, theme.border)
+		return input
+	end
+	makeToggle(espFilters, 35, "ESP distance limit", false, function(value) espDistanceLimit = value end)
+	makeLabel(espFilters, "Max distance (studs)", 67)
+	local espDistanceInput = filterInput("ESPDistanceInput", 92, "1-100000")
+	espDistanceInput.Text = tostring(espMaxDistance)
+	espDistanceInput.FocusLost:Connect(function()
+		local value = tonumber(espDistanceInput.Text)
+		if not value or value ~= value or value < 1 or value > 100000 then
+			espDistanceInput.Text = tostring(espMaxDistance)
+			espFilterStatus.Text = "Distance must be 1-100000 studs."
+			return
+		end
+		espMaxDistance = value
+		espDistanceInput.Text = tostring(value)
+		espFilterStatus.Text = ""
+	end)
+	makeToggle(espFilters, 126, "ESP named only", false, function(value) espNamedOnly = value end)
+	local function nameList(name, label, labelY, inputY, changed)
+		makeLabel(espFilters, label, labelY)
+		local input = filterInput(name, inputY, "Usernames, separated by commas")
+		local previous = ""
+		input.FocusLost:Connect(function()
+			local names = {}
+			for entry in (input.Text .. ","):gmatch("(.-),") do
+				local username = entry:match("^%s*(.-)%s*$")
+				if username ~= "" then
+					if #username > 20 or not username:match("^[%w_]+$") then
+						input.Text = previous
+						espFilterStatus.Text = "Use comma-separated usernames."
+						return
+					end
+					names[username:lower()] = true
+				end
+			end
+			previous = input.Text
+			changed(names)
+			espFilterStatus.Text = ""
+		end)
+	end
+	nameList("ESPTargetsInput", "Target usernames", 158, 183, function(names) espTargets = names end)
+	nameList("ESPWhitelistInput", "Hidden usernames", 217, 242, function(names) espWhitelist = names end)
+
 	local crosshair = Instance.new("Frame")
 	crosshair.Name = "Crosshair"
 	crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1171,8 +1236,16 @@ do
 			overlay.tracer.Visible = false
 			local character = targetPlayer.Character
 			local targetPart = getTargetPart(targetPlayer)
+			local name = targetPlayer.Name:lower()
+			local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			local origin = localRoot and localRoot.Position or (camera and camera.CFrame.Position)
+			local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
+			local targetPosition = targetRoot and targetRoot.Position or (targetPart and targetPart.Position)
+			local distance = origin and targetPosition and (targetPosition - origin).Magnitude
+			local allowed = not espWhitelist[name] and (not espNamedOnly or espTargets[name])
+				and (not espDistanceLimit or (distance and distance <= espMaxDistance))
 
-			if camera and character and character.Parent and targetPart then
+			if camera and character and character.Parent and targetPart and allowed then
 				local center, size = character:GetBoundingBox()
 				local minX, minY = math.huge, math.huge
 				local maxX, maxY = -math.huge, -math.huge
@@ -1221,11 +1294,7 @@ do
 						overlay.tracer.Visible = true
 					end
 
-					local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-					local origin = localRoot and localRoot.Position or camera.CFrame.Position
-					local targetRoot = character:FindFirstChild("HumanoidRootPart")
-					local targetPosition = targetRoot and targetRoot.Position or targetPart.Position
-					overlay.distance.Text = string.format("%.0f studs", (targetPosition - origin).Magnitude)
+					overlay.distance.Text = string.format("%.0f studs", distance)
 				end
 			else
 				box.Visible = false
