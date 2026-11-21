@@ -1,19 +1,92 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local IGNORE_TEAMMATES = false
+
+local lockedPlayer
+
+local function getTargetPart(targetPlayer)
+	if not targetPlayer or targetPlayer == player or targetPlayer.Parent ~= Players then
+		return nil
+	end
+	if IGNORE_TEAMMATES and player.Team and targetPlayer.Team == player.Team then
+		return nil
+	end
+
+	local character = targetPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local head = character and character:FindFirstChild("Head")
+	if humanoid and humanoid.Health > 0 and head and head:IsA("BasePart") then
+		return head
+	end
+	return nil
+end
+
+local function getClosestPlayer()
+	local camera = workspace.CurrentCamera
+	if not camera then return nil end
+
+	local mousePosition = UserInputService:GetMouseLocation()
+	local closestPlayer
+	local closestDistance = math.huge
+
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		local targetPart = getTargetPart(targetPlayer)
+		if targetPart then
+			local screenPosition, onScreen = camera:WorldToScreenPoint(targetPart.Position)
+			if onScreen and screenPosition.Z > 0 then
+				local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - mousePosition).Magnitude
+				if distance < closestDistance then
+					closestDistance = distance
+					closestPlayer = targetPlayer
+				end
+			end
+		end
+	end
+
+	return closestPlayer
+end
+
+UserInputService.InputBegan:Connect(function(input)
+	if UserInputService:GetFocusedTextBox() then return end
+	if input.KeyCode == Enum.KeyCode.Q then
+		if lockedPlayer then
+			lockedPlayer = nil
+		else
+			lockedPlayer = getClosestPlayer()
+		end
+	end
+end)
+
+RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, function()
+	if not lockedPlayer then return end
+
+	local targetPart = getTargetPart(lockedPlayer)
+	if not targetPart then
+		lockedPlayer = nil
+		return
+	end
+
+	local camera = workspace.CurrentCamera
+	if camera then
+		local position = camera.CFrame.Position
+		if (targetPart.Position - position).Magnitude > 0 then
+			camera.CFrame = CFrame.lookAt(position, targetPart.Position)
+		end
+	end
+end)
+
 game:GetService("StarterGui"):SetCore("SendNotification", {
 	Title = "Notification",
 	Text = "made by /azuremodded",
 	Duration = 5
 })
 
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local ContextActionService = game:GetService("ContextActionService")
-local RunService = game:GetService("RunService")
-
-local player = Players.LocalPlayer
 local mouse = player:GetMouse()
-
+local ContextActionService = game:GetService("ContextActionService")
 local AUTO_SHOOT_ENABLED = true
-local IGNORE_TEAMMATES = false
 
 local WHITELISTED_TOOLS = {
 	["[Revolver]"] = true,
