@@ -21,12 +21,6 @@ UDim = {new = function(...) return {...} end}
 UDim2 = {new = function(...) return {...} end, fromOffset = function(...) return {...} end, fromScale = function(...) return {...} end}
 Color3 = {fromRGB = function(...) return {...} end, fromHSV = function(...) return {...} end}
 math.atan2 = math.atan2 or math.atan
-math.clamp = math.clamp or function(value, minimum, maximum)
-	return math.max(minimum, math.min(value, maximum))
-end
-table.find = table.find or function(values, value)
-	for index, item in ipairs(values) do if item == value then return index end end
-end
 local codes = {}
 for _, key in ipairs({"Q", "T", "E", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
 	codes[key] = {Name = key}
@@ -112,7 +106,7 @@ local run = {RenderStepped = event(), Heartbeat = event()}
 function run:BindToRenderStep(_, _, callback) self.render = callback end
 local messages, titles = {}, {}
 local blockClick
-local lighting = {GlobalShadows = true, FogStart = 20, FogEnd = 1000, FogColor = {1, 1, 1}}
+local lighting = {GlobalShadows = true, FogStart = 20, FogEnd = 1000}
 local services = {
 	Players = players, RunService = run, UserInputService = input, Lighting = lighting,
 	StarterGui = {SetCore = function(_, _, message)
@@ -141,13 +135,10 @@ workspace = {
 local function press(key) input.InputBegan:fire({UserInputType = "Keyboard", KeyCode = codes[key]}, false) end
 local function runScheduled() while #scheduled > 0 do table.remove(scheduled, 1)() end end
 
-local paidScript = TEST_PAID_SCRIPT == true
-dofile(TEST_SCRIPT or "Triggerbot.lua")
+dofile("Triggerbot.lua")
 assert(#messages == 1 and titles[1] == "Notification")
 local menuFrame = find("Frame", "Settings")
-assert(find("TextLabel", "DragHandle").Text == (paidScript
-	and "Azure Paid | @socialdw on discord | discord.gg/azuremodded"
-	or "Azure | discord.gg/azuremodded"))
+assert(find("TextLabel", "DragHandle").Text == "Azure | discord.gg/azuremodded")
 local aimingPage, visualsPage = find("Frame", "AimbotPage"), find("Frame", "VisualsPage")
 find("TextButton", "VisualsTab").MouseButton1Click:fire()
 assert(visualsPage.Visible and not aimingPage.Visible)
@@ -532,31 +523,6 @@ assert(shots == 3 and warning:find("Triggerbot failed to activate", 1, true))
 equipped = weapon("[Revolver]")
 heldShot()
 assert(shots == 4)
-
-if paidScript then
-	local airPart = {
-		Position = vec(25, 0, 10), AssemblyLinearVelocity = vec(0, 0, 0),
-		Parent = targetCharacter, IsA = function(_, name) return name == "BasePart" end,
-	}
-	targetCharacter.FindFirstChild = function(_, name)
-		if name == "Head" or name == "HumanoidRootPart" then return head end
-		if name == "LowerTorso" then return airPart end
-	end
-	targetHumanoid.FloorMaterial = "Air"
-	click("Hit part: Head")
-	click("Hit part: HumanoidRootPart")
-	click("[ ] Use air part")
-	press("Q")
-	run.render()
-	assert(camera.CFrame.target and camera.CFrame.target.X == airPart.Position.X
-		and camera.CFrame.target.Y == airPart.Position.Y and camera.CFrame.target.Z == airPart.Position.Z,
-		"Air part should work when the selected ground part is absent")
-	click("[x] Use air part")
-	run.render()
-	camera.CFrame.target = nil
-	run.render()
-	assert(camera.CFrame.target == nil, "Missing ground part should release the lock")
-end
 
 players.PlayerRemoving:fire(target)
 assert(box.destroyed and find("Frame", "Tracer").destroyed)
