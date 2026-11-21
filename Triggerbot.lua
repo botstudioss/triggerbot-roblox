@@ -4,9 +4,20 @@ local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local IGNORE_TEAMMATES = false
+local IGNORE_TEAMMATES = true
+local fovRadius = 150
 
 local lockedPlayer
+
+local function isVisible(targetPart, camera)
+	local direction = targetPart.Position - camera.CFrame.Position
+	if direction.Magnitude == 0 then return true end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {player.Character}
+	local hit = workspace:Raycast(camera.CFrame.Position, direction, params)
+	return not hit or hit.Instance:IsDescendantOf(targetPart.Parent)
+end
 
 local function getTargetPart(targetPlayer)
 	if not targetPlayer or targetPlayer == player or targetPlayer.Parent ~= Players then
@@ -31,7 +42,7 @@ local function getClosestPlayer()
 
 	local mousePosition = UserInputService:GetMouseLocation()
 	local closestPlayer
-	local closestDistance = math.huge
+	local closestDistance = fovRadius
 
 	for _, targetPlayer in ipairs(Players:GetPlayers()) do
 		local targetPart = getTargetPart(targetPlayer)
@@ -39,7 +50,7 @@ local function getClosestPlayer()
 			local screenPosition, onScreen = camera:WorldToScreenPoint(targetPart.Position)
 			if onScreen and screenPosition.Z > 0 then
 				local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - mousePosition).Magnitude
-				if distance < closestDistance then
+				if distance <= closestDistance and isVisible(targetPart, camera) then
 					closestDistance = distance
 					closestPlayer = targetPlayer
 				end
@@ -49,25 +60,6 @@ local function getClosestPlayer()
 
 	return closestPlayer
 end
-
-UserInputService.InputBegan:Connect(function(input)
-	if UserInputService:GetFocusedTextBox() then return end
-	if input.KeyCode == Enum.KeyCode.Q then
-		local message
-		if lockedPlayer then
-			message = "Unlocked from " .. lockedPlayer.Name
-			lockedPlayer = nil
-		else
-			lockedPlayer = getClosestPlayer()
-			message = lockedPlayer and ("Locked onto " .. lockedPlayer.Name) or "No player on screen"
-		end
-		StarterGui:SetCore("SendNotification", {
-			Title = "Camlock",
-			Text = message,
-			Duration = 3
-		})
-	end
-end)
 
 RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, function()
 	if not lockedPlayer then return end
@@ -90,6 +82,21 @@ end)
 do
 	local enabled = false
 	local overlays = {}
+	local keys = {
+		Camlock = Enum.KeyCode.Q,
+		ESP = Enum.KeyCode.T,
+		Menu = Enum.KeyCode.RightShift
+	}
+	local waitingForKey
+	local keyButtons = {}
+	local palette = {
+		{Name = "Gray", Value = Color3.fromRGB(128, 128, 128)},
+		{Name = "Red", Value = Color3.fromRGB(255, 75, 75)},
+		{Name = "White", Value = Color3.fromRGB(255, 255, 255)},
+		{Name = "Blue", Value = Color3.fromRGB(75, 150, 255)},
+		{Name = "Green", Value = Color3.fromRGB(75, 220, 100)}
+	}
+	local colorIndexes = {Visible = 1, Hidden = 2, FOV = 3}
 
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "PlayerESP"
@@ -97,6 +104,115 @@ do
 	screenGui.IgnoreGuiInset = true
 	screenGui.ResetOnSpawn = false
 	screenGui.Parent = player:WaitForChild("PlayerGui")
+
+	local circle = Instance.new("Frame")
+	circle.Name = "FOVCircle"
+	circle.AnchorPoint = Vector2.new(0.5, 0.5)
+	circle.BackgroundTransparency = 1
+	circle.Parent = screenGui
+
+	local round = Instance.new("UICorner")
+	round.CornerRadius = UDim.new(1, 0)
+	round.Parent = circle
+
+	local circleOutline = Instance.new("UIStroke")
+	circleOutline.Thickness = 2
+	circleOutline.Parent = circle
+
+	local menu = Instance.new("Frame")
+	menu.Name = "Settings"
+	menu.Size = UDim2.fromOffset(260, 360)
+	menu.Position = UDim2.fromOffset(20, 100)
+	menu.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	menu.Visible = false
+	menu.Parent = screenGui
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 35)
+	title.BackgroundTransparency = 1
+	title.Text = "Settings"
+	title.Font = Enum.Font.SourceSansBold
+	title.TextSize = 20
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.Parent = menu
+
+	local function makeButton(y, width, x)
+		local button = Instance.new("TextButton")
+		button.Position = UDim2.fromOffset(x or 10, y)
+		button.Size = UDim2.fromOffset(width or 240, 32)
+		button.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.Font = Enum.Font.SourceSans
+		button.TextSize = 17
+		button.Parent = menu
+		return button
+	end
+
+	local function refreshKeyButtons()
+		for name, button in pairs(keyButtons) do
+			button.Text = name .. " key: " .. (waitingForKey == name and "Press a key..." or keys[name].Name)
+		end
+	end
+
+	for index, name in ipairs({"Camlock", "ESP", "Menu"}) do
+		local button = makeButton(40 + (index - 1) * 36)
+		keyButtons[name] = button
+		button.MouseButton1Click:Connect(function()
+			waitingForKey = name
+			refreshKeyButtons()
+		end)
+	end
+	refreshKeyButtons()
+
+	for index, name in ipairs({"Visible", "Hidden", "FOV"}) do
+		local button = makeButton(148 + (index - 1) * 36)
+		local function refreshColorButton()
+			button.Text = name .. " color: " .. palette[colorIndexes[name]].Name
+		end
+		refreshColorButton()
+		button.MouseButton1Click:Connect(function()
+			colorIndexes[name] = colorIndexes[name] % #palette + 1
+			refreshColorButton()
+		end)
+	end
+
+	local radiusLabel = Instance.new("TextLabel")
+	radiusLabel.Position = UDim2.fromOffset(55, 260)
+	radiusLabel.Size = UDim2.fromOffset(150, 32)
+	radiusLabel.BackgroundTransparency = 1
+	radiusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	radiusLabel.Font = Enum.Font.SourceSans
+	radiusLabel.TextSize = 17
+	radiusLabel.Parent = menu
+
+	local function updateRadius()
+		radiusLabel.Text = "FOV radius: " .. fovRadius
+	end
+	updateRadius()
+
+	local decrease = makeButton(260, 40, 10)
+	decrease.Text = "-"
+	decrease.MouseButton1Click:Connect(function()
+		fovRadius = math.max(25, fovRadius - 25)
+		updateRadius()
+	end)
+
+	local increase = makeButton(260, 40, 210)
+	increase.Text = "+"
+	increase.MouseButton1Click:Connect(function()
+		fovRadius = math.min(1000, fovRadius + 25)
+		updateRadius()
+	end)
+
+	local hint = Instance.new("TextLabel")
+	hint.Position = UDim2.fromOffset(10, 300)
+	hint.Size = UDim2.fromOffset(240, 50)
+	hint.BackgroundTransparency = 1
+	hint.Text = "Click a key to rebind it.\nEscape cancels rebinding."
+	hint.TextColor3 = Color3.fromRGB(200, 200, 200)
+	hint.Font = Enum.Font.SourceSans
+	hint.TextSize = 15
+	hint.Parent = menu
 
 	local function addPlayer(targetPlayer)
 		if targetPlayer == player or overlays[targetPlayer] then return end
@@ -108,7 +224,6 @@ do
 		box.Parent = screenGui
 
 		local outline = Instance.new("UIStroke")
-		outline.Color = Color3.fromRGB(128, 128, 128)
 		outline.Thickness = 2
 		outline.Parent = box
 
@@ -124,13 +239,28 @@ do
 		username.TextStrokeTransparency = 0
 		username.Parent = box
 
-		overlays[targetPlayer] = box
+		local distance = Instance.new("TextLabel")
+		distance.Name = "Distance"
+		distance.BackgroundTransparency = 1
+		distance.Position = UDim2.new(0, 0, 1, 20)
+		distance.Size = UDim2.new(1, 0, 0, 18)
+		distance.Font = Enum.Font.SourceSans
+		distance.TextColor3 = Color3.fromRGB(255, 255, 255)
+		distance.TextSize = 14
+		distance.TextStrokeTransparency = 0
+		distance.Parent = box
+
+		overlays[targetPlayer] = {
+			box = box,
+			outline = outline,
+			distance = distance
+		}
 	end
 
 	local function removePlayer(targetPlayer)
-		local box = overlays[targetPlayer]
-		if box then
-			box:Destroy()
+		local overlay = overlays[targetPlayer]
+		if overlay then
+			overlay.box:Destroy()
 			overlays[targetPlayer] = nil
 		end
 	end
@@ -143,11 +273,56 @@ do
 
 	UserInputService.InputBegan:Connect(function(input)
 		if UserInputService:GetFocusedTextBox() then return end
-		if input.KeyCode == Enum.KeyCode.T then
+		if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+		local key = input.KeyCode
+
+		if waitingForKey then
+			if key == Enum.KeyCode.Escape then
+				waitingForKey = nil
+			elseif key ~= Enum.KeyCode.Unknown then
+				local duplicate = false
+				for name, existing in pairs(keys) do
+					if name ~= waitingForKey and existing == key then
+						duplicate = true
+					end
+				end
+				if duplicate then
+					StarterGui:SetCore("SendNotification", {
+						Title = "Settings",
+						Text = "That key is already in use.",
+						Duration = 3
+					})
+				else
+					keys[waitingForKey] = key
+					waitingForKey = nil
+				end
+			end
+			refreshKeyButtons()
+			return
+		end
+
+		if key == keys.Menu then
+			menu.Visible = not menu.Visible
+		elseif key == keys.Camlock then
+			local message
+			if lockedPlayer then
+				message = "Unlocked from " .. lockedPlayer.Name
+				lockedPlayer = nil
+			else
+				lockedPlayer = getClosestPlayer()
+				message = lockedPlayer and ("Locked onto " .. lockedPlayer.Name)
+					or "No visible player in FOV"
+			end
+			StarterGui:SetCore("SendNotification", {
+				Title = "Camlock",
+				Text = message,
+				Duration = 3
+			})
+		elseif key == keys.ESP then
 			enabled = not enabled
 			if not enabled then
-				for _, box in pairs(overlays) do
-					box.Visible = false
+				for _, overlay in pairs(overlays) do
+					overlay.box.Visible = false
 				end
 			end
 			StarterGui:SetCore("SendNotification", {
@@ -159,13 +334,19 @@ do
 	end)
 
 	RunService.RenderStepped:Connect(function()
+		local mousePosition = UserInputService:GetMouseLocation()
+		circle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
+		circle.Size = UDim2.fromOffset(fovRadius * 2, fovRadius * 2)
+		circleOutline.Color = palette[colorIndexes.FOV].Value
 		if not enabled then return end
 
 		local camera = workspace.CurrentCamera
-		for targetPlayer, box in pairs(overlays) do
+		for targetPlayer, overlay in pairs(overlays) do
+			local box = overlay.box
 			local character = targetPlayer.Character
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if camera and character and character.Parent and humanoid and humanoid.Health > 0 then
+			local targetPart = getTargetPart(targetPlayer)
+
+			if camera and character and character.Parent and targetPart then
 				local center, size = character:GetBoundingBox()
 				local minX, minY = math.huge, math.huge
 				local maxX, maxY = -math.huge, -math.huge
@@ -175,7 +356,9 @@ do
 					for y = -1, 1, 2 do
 						for z = -1, 1, 2 do
 							local corner = center:PointToWorldSpace(Vector3.new(
-								size.X * x / 2, size.Y * y / 2, size.Z * z / 2
+								size.X * x / 2,
+								size.Y * y / 2,
+								size.Z * z / 2
 							))
 							local point = camera:WorldToViewportPoint(corner)
 							if point.Z <= 0 then
@@ -196,6 +379,13 @@ do
 				if box.Visible then
 					box.Position = UDim2.fromOffset(minX, minY)
 					box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
+					local colorName = isVisible(targetPart, camera) and "Visible" or "Hidden"
+					overlay.outline.Color = palette[colorIndexes[colorName]].Value
+					local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+					local origin = localRoot and localRoot.Position or camera.CFrame.Position
+					local targetRoot = character:FindFirstChild("HumanoidRootPart")
+					local targetPosition = targetRoot and targetRoot.Position or targetPart.Position
+					overlay.distance.Text = string.format("%.0f studs", (targetPosition - origin).Magnitude)
 				end
 			else
 				box.Visible = false
