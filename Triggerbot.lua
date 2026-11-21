@@ -106,6 +106,7 @@ end)
 
 do
 	local enabled = false
+	local showFovCircle = true
 	local showBoxes, showNames, showDistance = true, true, true
 	local showTracers, rainbowESP = false, false
 	local showTargetDot, showTargetTracer, showTargetHighlight, showTargetStats = false, false, false, false
@@ -130,20 +131,22 @@ do
 	}
 	local colorIndexes = {Visible = 1, Hidden = 2, FOV = 3}
 	local theme = {
-		background = Color3.fromRGB(15, 20, 32),
-		surface = Color3.fromRGB(22, 29, 44),
-		control = Color3.fromRGB(31, 41, 58),
-		border = Color3.fromRGB(48, 64, 86),
-		accent = Color3.fromRGB(80, 175, 255),
-		active = Color3.fromRGB(30, 70, 105),
-		text = Color3.fromRGB(235, 242, 250),
-		muted = Color3.fromRGB(150, 166, 186)
+		background = Color3.fromRGB(13, 14, 13),
+		surface = Color3.fromRGB(22, 23, 22),
+		control = Color3.fromRGB(18, 19, 18),
+		border = Color3.fromRGB(56, 61, 55),
+		accent = Color3.fromRGB(151, 240, 139),
+		active = Color3.fromRGB(35, 44, 34),
+		text = Color3.fromRGB(217, 220, 213),
+		muted = Color3.fromRGB(157, 162, 153)
 	}
 
 	local function decorate(parent, radius, color)
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(0, radius)
-		corner.Parent = parent
+		if radius > 0 then
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, radius)
+			corner.Parent = parent
+		end
 		if color then
 			local stroke = Instance.new("UIStroke")
 			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -190,17 +193,17 @@ do
 	menu.ZIndex = 10
 	menu.Visible = false
 	menu.Parent = screenGui
-	decorate(menu, 10, theme.border)
+	decorate(menu, 0, theme.accent)
 
 	local title = Instance.new("TextLabel")
 	title.Name = "DragHandle"
 	title.Position = UDim2.fromOffset(0, 0)
-	title.Size = UDim2.new(1, 0, 0, 50)
+	title.Size = UDim2.new(1, 0, 0, 24)
 	title.BackgroundTransparency = 1
 	title.BorderSizePixel = 0
-	title.Text = "Azure | @socialdw | .gg/azuremodded"
-	title.Font = Enum.Font.GothamBold
-	title.TextSize = 13
+	title.Text = "Azure | Beta"
+	title.Font = Enum.Font.Code
+	title.TextSize = 12
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextColor3 = theme.text
 	title.Active = true
@@ -208,15 +211,15 @@ do
 	title.Parent = menu
 
 	local titlePadding = Instance.new("UIPadding")
-	titlePadding.PaddingLeft = UDim.new(0, 16)
+	titlePadding.PaddingLeft = UDim.new(0, 8)
 	titlePadding.Parent = title
 
 	local dragHint = Instance.new("TextLabel")
 	dragHint.Position = UDim2.new(1, -124, 0, 0)
-	dragHint.Size = UDim2.fromOffset(108, 50)
+	dragHint.Size = UDim2.fromOffset(108, 24)
 	dragHint.BackgroundTransparency = 1
 	dragHint.Text = "DRAG TO MOVE"
-	dragHint.Font = Enum.Font.Gotham
+	dragHint.Font = Enum.Font.Code
 	dragHint.TextSize = 10
 	dragHint.TextColor3 = theme.muted
 	dragHint.ZIndex = 12
@@ -256,8 +259,8 @@ do
 	local stopStatsDrag
 
 	local separator = Instance.new("Frame")
-	separator.Position = UDim2.fromOffset(16, 49)
-	separator.Size = UDim2.new(1, -32, 0, 1)
+	separator.Position = UDim2.fromOffset(8, 24)
+	separator.Size = UDim2.new(1, -16, 0, 1)
 	separator.BackgroundColor3 = theme.border
 	separator.BorderSizePixel = 0
 	separator.ZIndex = 11
@@ -270,8 +273,8 @@ do
 	for index, name in ipairs({"Aimbot", "Player", "Visuals"}) do
 		local page = Instance.new("Frame")
 		page.Name = name .. "Page"
-		page.Position = UDim2.fromOffset(8, 94)
-		page.Size = UDim2.new(1, -16, 1, -102)
+		page.Position = UDim2.fromOffset(8, 53)
+		page.Size = UDim2.new(1, -16, 1, -61)
 		page.BackgroundTransparency = 1
 		page.Visible = name == "Aimbot"
 		page.ZIndex = 11
@@ -281,8 +284,8 @@ do
 		content.Size = UDim2.new(1, 0, 1, 0)
 		content.BackgroundTransparency = 1
 		content.BorderSizePixel = 0
-		content.CanvasSize = UDim2.fromOffset(0, 560)
-		content.ScrollBarThickness = 5
+		content.CanvasSize = UDim2.fromOffset(0, 358)
+		content.ScrollBarThickness = 4
 		content.ScrollBarImageColor3 = theme.border
 		content.ScrollingDirection = Enum.ScrollingDirection.Y
 		content.ZIndex = 12
@@ -291,54 +294,57 @@ do
 
 		local tab = Instance.new("TextButton")
 		tab.Name = name .. "Tab"
-		tab.Position = UDim2.fromOffset(16 + (index - 1) * 106, 57)
-		tab.Size = UDim2.fromOffset(98, 28)
+		tab.Position = UDim2.fromOffset(8 + (index - 1) * 80, 27)
+		tab.Size = UDim2.fromOffset(76, 22)
 		tab.BackgroundColor3 = name == "Aimbot" and theme.active or theme.background
 		tab.BorderSizePixel = 0
 		tab.Text = name
-		tab.Font = Enum.Font.GothamBold
+		tab.Font = Enum.Font.Code
 		tab.TextSize = 12
-		tab.TextColor3 = name == "Aimbot" and theme.accent or theme.muted
+		tab.TextColor3 = name == "Aimbot" and theme.text or theme.muted
 		tab.ZIndex = 11
 		tab.Parent = menu
-		decorate(tab, 6)
 		tabs[name] = tab
 
 		tab.MouseButton1Click:Connect(function()
 			for pageName, otherPage in pairs(pages) do
 				otherPage.Visible = pageName == name
-				tabs[pageName].TextColor3 = pageName == name and theme.accent or theme.muted
+				tabs[pageName].TextColor3 = pageName == name and theme.text or theme.muted
 				tabs[pageName].BackgroundColor3 = pageName == name and theme.active or theme.background
 			end
 		end)
 	end
 
-	local function makeSection(page, name, x)
+	local function compact(y)
+		return math.floor(y * 0.75)
+	end
+
+	local function makeSection(page, name, x, height)
 		local section = Instance.new("Frame")
 		section.Position = UDim2.fromOffset(x, 0)
-		section.Size = UDim2.fromOffset(236, 550)
+		section.Size = UDim2.fromOffset(236, compact(height))
 		section.BackgroundColor3 = theme.surface
 		section.BorderSizePixel = 0
 		section.ZIndex = 13
 		section.Parent = page
-		decorate(section, 8, theme.border)
+		decorate(section, 0, theme.border)
 
 		local heading = Instance.new("TextLabel")
-		heading.Position = UDim2.fromOffset(8, 5)
-		heading.Size = UDim2.new(1, -16, 0, 20)
+		heading.Position = UDim2.fromOffset(6, 3)
+		heading.Size = UDim2.new(1, -12, 0, 17)
 		heading.BackgroundTransparency = 1
 		heading.Text = name
 		heading.TextColor3 = theme.text
 		heading.TextXAlignment = Enum.TextXAlignment.Left
-		heading.Font = Enum.Font.GothamBold
+		heading.Font = Enum.Font.Code
 		heading.TextSize = 12
 		heading.ZIndex = 14
 		heading.Parent = section
 
 		local line = Instance.new("Frame")
-		line.Position = UDim2.fromOffset(8, 25)
-		line.Size = UDim2.new(1, -16, 0, 1)
-		line.BackgroundColor3 = theme.border
+		line.Position = UDim2.fromOffset(0, 0)
+		line.Size = UDim2.new(1, 0, 0, 2)
+		line.BackgroundColor3 = theme.accent
 		line.BorderSizePixel = 0
 		line.ZIndex = 14
 		line.Parent = section
@@ -346,51 +352,72 @@ do
 		return section
 	end
 
-	local keySection = makeSection(pageContents.Aimbot, "Keybinds", 0)
-	local fovSection = makeSection(pageContents.Aimbot, "Camera Aimbot", 248)
-	local teamSection = makeSection(pageContents.Player, "Player", 0)
-	local visibilitySection = makeSection(pageContents.Player, "Movement", 248)
-	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0)
-	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248)
+	local keySection = makeSection(pageContents.Aimbot, "General & Keybinds", 0, 330)
+	local fovSection = makeSection(pageContents.Aimbot, "Camera Aimbot", 248, 476)
+	local teamSection = makeSection(pageContents.Player, "Player", 0, 185)
+	local visibilitySection = makeSection(pageContents.Player, "Movement", 248, 166)
+	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0, 300)
+	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248, 262)
 
 	local function makeLabel(parent, text, y, height)
 		local label = Instance.new("TextLabel")
-		label.Position = UDim2.fromOffset(8, y)
-		label.Size = UDim2.new(1, -16, 0, height or 24)
+		label.Position = UDim2.fromOffset(8, compact(y))
+		label.Size = UDim2.new(1, -16, 0, compact(height or 24))
 		label.BackgroundTransparency = 1
 		label.Text = text
 		label.TextColor3 = theme.muted
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.TextWrapped = true
-		label.Font = Enum.Font.Gotham
+		label.Font = Enum.Font.Code
 		label.TextSize = 12
 		label.ZIndex = 14
 		label.Parent = parent
 		return label
 	end
 
-	local function makeButton(parent, y, width, x)
+	local function makeButton(parent, y, width, x, plain)
 		local button = Instance.new("TextButton")
-		button.Position = UDim2.fromOffset(x or 8, y)
-		button.Size = UDim2.fromOffset(width or 220, 26)
+		button.Position = UDim2.fromOffset(x or 8, compact(y))
+		button.Size = UDim2.fromOffset(width or 220, 20)
 		button.BackgroundColor3 = theme.control
 		button.BorderSizePixel = 0
 		button.TextColor3 = theme.text
-		button.Font = Enum.Font.Gotham
+		button.Font = Enum.Font.Code
 		button.TextSize = 12
 		button.ZIndex = 14
 		button.Parent = parent
-		decorate(button, 5)
+		if not plain then decorate(button, 0, theme.border) end
 		return button
 	end
 
 	local function makeToggle(parent, y, name, initial, changed)
 		local value = initial
-		local button = makeButton(parent, y)
+		local button = makeButton(parent, y, nil, nil, true)
+		button.Name = name .. "Toggle"
+		button.BackgroundTransparency = 1
+		button.Text = ""
+		local label = Instance.new("TextLabel")
+		label.Name = "ToggleLabel"
+		label.Position = UDim2.fromOffset(19, 0)
+		label.Size = UDim2.new(1, -19, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = name
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Font = Enum.Font.Code
+		label.TextSize = 12
+		label.ZIndex = 15
+		label.Parent = button
+		local indicator = Instance.new("Frame")
+		indicator.Name = "ToggleIndicator"
+		indicator.Position = UDim2.new(0, 3, 0.5, -5)
+		indicator.Size = UDim2.fromOffset(10, 10)
+		indicator.BorderSizePixel = 0
+		indicator.ZIndex = 15
+		indicator.Parent = button
+		decorate(indicator, 0, theme.border)
 		local function refresh()
-			button.Text = (value and "[x] " or "[ ] ") .. name
-			button.BackgroundColor3 = value and theme.active or theme.control
-			button.TextColor3 = value and theme.accent or theme.muted
+			label.TextColor3 = theme.text
+			indicator.BackgroundColor3 = value and theme.accent or theme.control
 		end
 		button.MouseButton1Click:Connect(function()
 			value = not value
@@ -430,7 +457,7 @@ do
 		end)
 	end
 	refreshKeyButtons()
-	makeLabel(keySection, "Click a key to rebind it. Escape cancels.", 145, 50)
+	makeLabel(keySection, "Click a key to rebind. Escape cancels.", 145, 24)
 
 	for _, name in ipairs({"Visible", "Hidden", "FOV"}) do
 		local section = name == "FOV" and fovColors or espColors
@@ -469,6 +496,10 @@ do
 		updateRadius()
 	end)
 
+	makeToggle(keySection, 177, "FOV", true, function(value)
+		fovLimitEnabled = value
+		circle.Visible = value and showFovCircle
+	end)
 	makeToggle(keySection, 210, "Triggerbot", true, function(value)
 		triggerbotEnabled = value
 		scanGeneration = scanGeneration + 1
@@ -491,23 +522,22 @@ do
 	makeToggle(fovSection, 233, "Target tracer", false, function(value) showTargetTracer = value end)
 	makeToggle(fovSection, 265, "Target highlight", false, function(value) showTargetHighlight = value end)
 	makeToggle(fovSection, 349, "Target stats", false, function(value) showTargetStats = value end)
-	makeToggle(fovSection, 381, "FOV limit", true, function(value) fovLimitEnabled = value end)
 	makeLabel(fovSection, "Custom prediction (0-1 sec)", 413)
 	local predictionInput = Instance.new("TextBox")
 	predictionInput.Name = "PredictionInput"
-	predictionInput.Position = UDim2.fromOffset(8, 440)
-	predictionInput.Size = UDim2.fromOffset(220, 26)
+	predictionInput.Position = UDim2.fromOffset(8, compact(440))
+	predictionInput.Size = UDim2.fromOffset(220, 20)
 	predictionInput.BackgroundColor3 = theme.control
 	predictionInput.BorderSizePixel = 0
 	predictionInput.TextColor3 = theme.text
 	predictionInput.PlaceholderColor3 = theme.muted
 	predictionInput.PlaceholderText = "Seconds, e.g. 0.12"
 	predictionInput.ClearTextOnFocus = false
-	predictionInput.Font = Enum.Font.Gotham
+	predictionInput.Font = Enum.Font.Code
 	predictionInput.TextSize = 12
 	predictionInput.ZIndex = 14
 	predictionInput.Parent = fovSection
-	decorate(predictionInput, 5)
+	decorate(predictionInput, 0, theme.border)
 	local predictionLabel = makeLabel(fovSection, "", 291)
 	local function updatePrediction()
 		predictionLabel.Text = "Prediction: " .. tostring(predictionTime) .. " sec"
@@ -525,12 +555,14 @@ do
 		updatePrediction()
 	end)
 	local predictionDecrease = makeButton(fovSection, 317, 104, 8)
+	predictionDecrease.Name = "PredictionDecrease"
 	predictionDecrease.Text = "-"
 	predictionDecrease.MouseButton1Click:Connect(function()
 		predictionTime = math.max(0, predictionTime - 0.05)
 		updatePrediction()
 	end)
 	local predictionIncrease = makeButton(fovSection, 317, 104, 124)
+	predictionIncrease.Name = "PredictionIncrease"
 	predictionIncrease.Text = "+"
 	predictionIncrease.MouseButton1Click:Connect(function()
 		predictionTime = math.min(1, predictionTime + 0.05)
@@ -617,7 +649,10 @@ do
 	colorCorrection.Contrast = 0.1
 	colorCorrection.Parent = Lighting
 	makeToggle(fovColors, 195, "Color correction", false, function(value) colorCorrection.Enabled = value end)
-	makeToggle(fovColors, 227, "FOV circle", true, function(value) circle.Visible = value end)
+	makeToggle(fovColors, 227, "FOV circle", true, function(value)
+		showFovCircle = value
+		circle.Visible = value and fovLimitEnabled
+	end)
 
 	local targetDot = Instance.new("Frame")
 	targetDot.Name = "TargetDot"
@@ -643,12 +678,12 @@ do
 	targetStats.BackgroundTransparency = 0.1
 	targetStats.BorderSizePixel = 0
 	targetStats.TextColor3 = theme.text
-	targetStats.Font = Enum.Font.GothamBold
+	targetStats.Font = Enum.Font.Code
 	targetStats.TextSize = 12
 	targetStats.TextXAlignment = Enum.TextXAlignment.Left
 	targetStats.Visible = false
 	targetStats.Parent = screenGui
-	decorate(targetStats, 6, theme.border)
+	decorate(targetStats, 0, theme.accent)
 	local statsPadding = Instance.new("UIPadding")
 	statsPadding.PaddingLeft = UDim.new(0, 12)
 	statsPadding.Parent = targetStats
