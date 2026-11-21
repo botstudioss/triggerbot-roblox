@@ -10,8 +10,12 @@ The scrollable settings pages include team and wall checks, aim prediction,
 target indicators, ESP styles, movement controls, and camera and lighting
 effects. Flight uses WASD, Space and Ctrl. Speed, flight, visual effects and
 prediction are disabled by default; the triggerbot and checks are enabled.
-The existing triggerbot compatibility scan can kick the player if it finds no
-supported tool. Disable the triggerbot before the scan completes to skip it.
+Use the prediction toggle and enter a custom lead time from 0 to 1 second in
+the Aimbot tab. The FOV limit and FOV circle have independent toggles.
+
+The triggerbot compatibility scan can kick the player if it finds no supported
+tool. Disabling the triggerbot or compatibility scan cancels pending scans;
+re-enabling either allows scans on the next character spawn.
 
 For mock-based checks, run `lua tests/combined_features.lua` from the repository
 root. These checks do not replace testing inside Roblox.

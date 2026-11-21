@@ -36,7 +36,7 @@ Enum = {
 RaycastParams = {new = function() return {} end}
 local objects = {}
 Instance = {new = function(class)
-	local object = {class = class, MouseButton1Click = event(), InputBegan = event(), Destroy = function(self) self.destroyed = true end}
+	local object = {class = class, MouseButton1Click = event(), InputBegan = event(), FocusLost = event(), Destroy = function(self) self.destroyed = true end}
 	table.insert(objects, object)
 	return object
 end}
@@ -110,6 +110,15 @@ dofile("Triggerbot.lua")
 press("Q")
 assert(messages[#messages] == "No eligible player in FOV")
 click("[x] Wall check")
+head.Position = vec(160, 0, 10)
+press("Q")
+assert(messages[#messages] == "No eligible player in FOV")
+click("[x] FOV limit")
+press("Q")
+assert(messages[#messages] == "Locked onto Target")
+press("Q")
+click("[ ] FOV limit")
+head.Position = vec(20, 0, 10)
 press("Q")
 assert(messages[#messages] == "Locked onto Target")
 click("[ ] Prediction")
@@ -119,6 +128,28 @@ for _, object in ipairs(objects) do
 end
 run.render()
 assert(camera.CFrame.target.X == 20.5)
+local prediction = find("TextBox", "PredictionInput")
+prediction.Text = "0.1234"
+prediction.FocusLost:fire()
+run.render()
+assert(math.abs(camera.CFrame.target.X - 21.234) < 0.000001)
+for _, invalid in ipairs({"abc", "-0.1", "1.1", "1e309", ""}) do
+	prediction.Text = invalid
+	prediction.FocusLost:fire()
+	assert(prediction.Text == "0.1234" and messages[#messages] == "Enter a number between 0 and 1 second.")
+end
+prediction.Text = "1"
+prediction.FocusLost:fire()
+run.render()
+assert(camera.CFrame.target.X == 30)
+click("[x] Prediction")
+run.render()
+assert(camera.CFrame.target.X == 20)
+click("[ ] Prediction")
+prediction.Text = "0"
+prediction.FocusLost:fire()
+run.render()
+assert(camera.CFrame.target.X == 20)
 click("[ ] Target dot")
 click("[ ] Target tracer")
 click("[ ] Target highlight")
@@ -172,6 +203,10 @@ press("RightShift")
 press("RightShift")
 input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(100, 100)}, false)
 assert(menu.Position[1] == 300 and menu.Position[2] == 0)
+click("[x] Compatibility scan")
+click("[ ] Compatibility scan")
+runScheduled()
+assert(kicks == 0)
 click("[x] Triggerbot")
 runScheduled()
 assert(kicks == 0)
@@ -208,6 +243,11 @@ assert(root.CFrame.Z == 15)
 click("[x] Flight (WASD, Space, Ctrl)")
 
 press("T")
+local circle = find("Frame", "FOVCircle")
+click("[x] FOV circle")
+assert(not circle.Visible)
+click("[ ] FOV circle")
+assert(circle.Visible)
 click("[x] Boxes")
 click("[x] Names")
 click("[x] Distance")

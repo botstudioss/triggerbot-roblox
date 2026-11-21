@@ -7,9 +7,12 @@ local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local IGNORE_TEAMMATES = true
 local fovRadius = 150
+local fovLimitEnabled = true
 local wallCheck = true
 local camlockEnabled = true
 local triggerbotEnabled = true
+local compatibilityScanEnabled = true
+local scanGeneration = 0
 local menuOpen = false
 local predictionEnabled = false
 local predictionTime = 0
@@ -63,7 +66,7 @@ local function getClosestPlayer()
 
 	local mousePosition = UserInputService:GetMouseLocation()
 	local closestPlayer
-	local closestDistance = fovRadius
+	local closestDistance = fovLimitEnabled and fovRadius or math.huge
 
 	for _, targetPlayer in ipairs(Players:GetPlayers()) do
 		local targetPart = getTargetPart(targetPlayer)
@@ -166,6 +169,7 @@ do
 	circle.Name = "FOVCircle"
 	circle.AnchorPoint = Vector2.new(0.5, 0.5)
 	circle.BackgroundTransparency = 1
+	circle.Visible = true
 	circle.Parent = screenGui
 
 	local round = Instance.new("UICorner")
@@ -467,10 +471,16 @@ do
 
 	makeToggle(keySection, 210, "Triggerbot", true, function(value)
 		triggerbotEnabled = value
+		scanGeneration = scanGeneration + 1
 		if not value then
 			leftHeld, mouseDown, lastTarget = false, false, nil
 		end
 	end)
+	makeToggle(keySection, 242, "Compatibility scan", true, function(value)
+		compatibilityScanEnabled = value
+		scanGeneration = scanGeneration + 1
+	end)
+	makeLabel(keySection, "Scan stops immediately; enabling applies on the next spawn.", 274, 48)
 	makeToggle(fovSection, 105, "Camlock", true, function(value)
 		camlockEnabled = value
 		if not value then unlock() end
@@ -481,11 +491,39 @@ do
 	makeToggle(fovSection, 233, "Target tracer", false, function(value) showTargetTracer = value end)
 	makeToggle(fovSection, 265, "Target highlight", false, function(value) showTargetHighlight = value end)
 	makeToggle(fovSection, 349, "Target stats", false, function(value) showTargetStats = value end)
+	makeToggle(fovSection, 381, "FOV limit", true, function(value) fovLimitEnabled = value end)
+	makeLabel(fovSection, "Custom prediction (0-1 sec)", 413)
+	local predictionInput = Instance.new("TextBox")
+	predictionInput.Name = "PredictionInput"
+	predictionInput.Position = UDim2.fromOffset(8, 440)
+	predictionInput.Size = UDim2.fromOffset(220, 26)
+	predictionInput.BackgroundColor3 = theme.control
+	predictionInput.BorderSizePixel = 0
+	predictionInput.TextColor3 = theme.text
+	predictionInput.PlaceholderColor3 = theme.muted
+	predictionInput.PlaceholderText = "Seconds, e.g. 0.12"
+	predictionInput.ClearTextOnFocus = false
+	predictionInput.Font = Enum.Font.Gotham
+	predictionInput.TextSize = 12
+	predictionInput.ZIndex = 14
+	predictionInput.Parent = fovSection
+	decorate(predictionInput, 5)
 	local predictionLabel = makeLabel(fovSection, "", 291)
 	local function updatePrediction()
-		predictionLabel.Text = string.format("Prediction: %.2f sec", predictionTime)
+		predictionLabel.Text = "Prediction: " .. tostring(predictionTime) .. " sec"
+		predictionInput.Text = tostring(predictionTime)
 	end
 	updatePrediction()
+	predictionInput.FocusLost:Connect(function()
+		local value = tonumber(predictionInput.Text)
+		if not value or value ~= value or value < 0 or value > 1 then
+			updatePrediction()
+			notify("Prediction", "Enter a number between 0 and 1 second.")
+			return
+		end
+		predictionTime = value
+		updatePrediction()
+	end)
 	local predictionDecrease = makeButton(fovSection, 317, 104, 8)
 	predictionDecrease.Text = "-"
 	predictionDecrease.MouseButton1Click:Connect(function()
@@ -579,6 +617,7 @@ do
 	colorCorrection.Contrast = 0.1
 	colorCorrection.Parent = Lighting
 	makeToggle(fovColors, 195, "Color correction", false, function(value) colorCorrection.Enabled = value end)
+	makeToggle(fovColors, 227, "FOV circle", true, function(value) circle.Visible = value end)
 
 	local targetDot = Instance.new("Frame")
 	targetDot.Name = "TargetDot"
@@ -1021,8 +1060,8 @@ local function isGun(tool)
 	return false
 end
 
-local function scanAllToolsSafely()
-	if not triggerbotEnabled then return end
+local function scanAllToolsSafely(generation)
+	if not triggerbotEnabled or not compatibilityScanEnabled or generation ~= scanGeneration then return end
 	local allObjects = {}
 	for _, service in ipairs(game:GetChildren()) do
 		table.insert(allObjects, service)
@@ -1033,7 +1072,7 @@ local function scanAllToolsSafely()
 	local found = false
 
 	local function scanBatch()
-		if not triggerbotEnabled then return end
+		if not triggerbotEnabled or not compatibilityScanEnabled or generation ~= scanGeneration then return end
 		local processed = 0
 		while index <= #allObjects and processed < batchSize do
 			local obj = allObjects[index]
@@ -1059,6 +1098,11 @@ local function scanAllToolsSafely()
 	end
 
 	task.spawn(scanBatch)
+end
+
+local function scheduleToolScan()
+	local generation = scanGeneration
+	task.spawn(function() scanAllToolsSafely(generation) end)
 end
 
 local function attemptLocalFire()
@@ -1270,10 +1314,10 @@ end
 
 player.CharacterAdded:Connect(function(char)
 	setupCharacter(char)
-	task.spawn(scanAllToolsSafely)
+	scheduleToolScan()
 end)
 
 if player.Character then
 	setupCharacter(player.Character)
-	task.spawn(scanAllToolsSafely)
+	scheduleToolScan()
 end
