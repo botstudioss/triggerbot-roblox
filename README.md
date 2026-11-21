@@ -15,6 +15,8 @@ equipped and the menu is closed. Raycast mode can affect non-weapon game rays.
 Neither method has been verified in Z ZHD or DAS HOODS; games that send target
 positions through other interfaces or validate shots on the server may not
 work. Unsupported hook APIs are reported in the menu.
+Some Xeno versions may lack these APIs; the menu identifies the missing one
+and keeps Silent Aim off rather than claiming it is working.
 
 The Silent Aim hook approach is adapted from
 [Averiias/Universal-SilentAim](https://github.com/Averiias/Universal-SilentAim),

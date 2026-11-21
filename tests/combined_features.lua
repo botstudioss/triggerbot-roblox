@@ -144,21 +144,26 @@ local inputBox = find("TextBox", "PredictionInput")
 assert(inputBox.Position[2] + inputBox.Size[2] <= inputBox.Parent.Size[2])
 assert(inputBox.Parent.Size[2] <= inputBox.Parent.Parent.CanvasSize[2])
 click("[ ] Silent aim")
-assert(find("TextLabel", "Executor hook APIs unavailable."))
-click("[ ] Silent aim")
-assert(find("TextLabel", "Executor hook APIs unavailable."))
+assert(find("TextLabel", "Missing: hookmetamethod"))
 local hooks, caller, method = {}, false, "Raycast"
 hookmetamethod = function(_, name, callback)
 	hooks[name] = callback
 	if name == "__index" then return function() return "original" end end
 	return function(_, origin, direction) return origin, direction end
 end
+click("[ ] Silent aim")
+assert(find("TextLabel", "Missing: newcclosure"))
 newcclosure = function(callback) return callback end
+click("[ ] Silent aim")
+assert(find("TextLabel", "Missing: checkcaller"))
 checkcaller = function() return caller end
-getnamecallmethod = function() return method end
 typeof = function(value) return getmetatable(value) == vector and "Vector3" or type(value) end
 click("[ ] Silent aim")
 assert(hooks.__index)
+click("Method: Mouse")
+assert(find("TextLabel", "Missing: getnamecallmethod"))
+assert(find("TextButton", "Method: Mouse"))
+getnamecallmethod = function() return method end
 equipped = {}
 run.RenderStepped:fire()
 assert(hooks.__index(mouseObject, "Target") == "original")
@@ -192,6 +197,7 @@ run.RenderStepped:fire()
 assert(hooks.__index(mouseObject, "Target") == head)
 click("Method: Mouse")
 assert(hooks.__namecall)
+assert(find("TextLabel", "SilentAimStatus").Text == "")
 local origin, direction = hooks.__namecall(workspace, vec(0, 0, 0), vec(0, 0, 100))
 assert(origin.Magnitude == 0 and math.abs(direction.Magnitude - 100) < 0.000001 and direction.X > 99)
 method = "Other"

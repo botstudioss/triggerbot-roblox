@@ -151,11 +151,11 @@ local function silentTarget()
 end
 
 local function installSilentHook(method)
-	if type(hookmetamethod) ~= "function" or type(newcclosure) ~= "function" or type(checkcaller) ~= "function" then
-		return false, "Executor hook APIs unavailable."
-	end
+	if type(hookmetamethod) ~= "function" then return false, "Missing: hookmetamethod" end
+	if type(newcclosure) ~= "function" then return false, "Missing: newcclosure" end
+	if type(checkcaller) ~= "function" then return false, "Missing: checkcaller" end
 	if method == "Raycast" and type(getnamecallmethod) ~= "function" then
-		return false, "Raycast hook API unavailable."
+		return false, "Missing: getnamecallmethod"
 	end
 	if (method == "Mouse" and mouseHookInstalled) or (method == "Raycast" and rayHookInstalled) then
 		return true
@@ -747,7 +747,8 @@ do
 	end)
 	makeLabel(aimSection, "Uses the Aimbot tab prediction setting.", 390, 48)
 
-	local silentStatus = makeLabel(silentSection, "Experimental: game support unknown.", 395, 65)
+	local silentStatus = makeLabel(silentSection, "", 323, 65)
+	silentStatus.Name = "SilentAimStatus"
 	local function silentError(message)
 		silentStatus.Text = message
 		silentStatus.TextColor3 = Color3.fromRGB(255, 115, 115)
@@ -759,7 +760,7 @@ do
 		end
 		silent.enabled = value
 		silent.target = nil
-		silentStatus.Text = "Experimental: game support unknown."
+		silentStatus.Text = ""
 		silentStatus.TextColor3 = theme.muted
 	end)
 	local methodButton = makeButton(silentSection, 67)
@@ -772,6 +773,8 @@ do
 			if not ok then silentError(err); return end
 		end
 		silent.method = method
+		silentStatus.Text = ""
+		silentStatus.TextColor3 = theme.muted
 		refreshMethod()
 	end)
 	makeToggle(silentSection, 99, "Silent FOV limit", true, function(value) silent.limit = value end)
@@ -795,7 +798,6 @@ do
 	local silentPlus = makeButton(silentSection, 291, 104, 124)
 	silentPlus.Name, silentPlus.Text = "SilentFOVIncrease", "+"
 	silentPlus.MouseButton1Click:Connect(function() silent.radius = math.min(1000, silent.radius + 25); refreshSilentRadius() end)
-	makeLabel(silentSection, "Raycast mode redirects game rays while a tool is equipped.", 323, 64)
 
 	makeToggle(teamSection, 35, "Team check", true, function(value) IGNORE_TEAMMATES = value end)
 	makeLabel(teamSection, "Existing locks stay active behind walls.", 70, 50)
