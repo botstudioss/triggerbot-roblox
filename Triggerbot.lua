@@ -106,6 +106,7 @@ end)
 
 do
 	local enabled = false
+	local showFovCircle = true
 	local showBoxes, showNames, showDistance = true, true, true
 	local showTracers, rainbowESP = false, false
 	local showTargetDot, showTargetTracer, showTargetHighlight, showTargetStats = false, false, false, false
@@ -346,7 +347,7 @@ do
 		return section
 	end
 
-	local keySection = makeSection(pageContents.Aimbot, "Keybinds", 0)
+	local keySection = makeSection(pageContents.Aimbot, "General & Keybinds", 0)
 	local fovSection = makeSection(pageContents.Aimbot, "Camera Aimbot", 248)
 	local teamSection = makeSection(pageContents.Player, "Player", 0)
 	local visibilitySection = makeSection(pageContents.Player, "Movement", 248)
@@ -430,7 +431,7 @@ do
 		end)
 	end
 	refreshKeyButtons()
-	makeLabel(keySection, "Click a key to rebind it. Escape cancels.", 145, 50)
+	makeLabel(keySection, "Click a key to rebind. Escape cancels.", 145, 24)
 
 	for _, name in ipairs({"Visible", "Hidden", "FOV"}) do
 		local section = name == "FOV" and fovColors or espColors
@@ -469,6 +470,10 @@ do
 		updateRadius()
 	end)
 
+	makeToggle(keySection, 177, "FOV", true, function(value)
+		fovLimitEnabled = value
+		circle.Visible = value and showFovCircle
+	end)
 	makeToggle(keySection, 210, "Triggerbot", true, function(value)
 		triggerbotEnabled = value
 		scanGeneration = scanGeneration + 1
@@ -491,7 +496,6 @@ do
 	makeToggle(fovSection, 233, "Target tracer", false, function(value) showTargetTracer = value end)
 	makeToggle(fovSection, 265, "Target highlight", false, function(value) showTargetHighlight = value end)
 	makeToggle(fovSection, 349, "Target stats", false, function(value) showTargetStats = value end)
-	makeToggle(fovSection, 381, "FOV limit", true, function(value) fovLimitEnabled = value end)
 	makeLabel(fovSection, "Custom prediction (0-1 sec)", 413)
 	local predictionInput = Instance.new("TextBox")
 	predictionInput.Name = "PredictionInput"
@@ -617,7 +621,10 @@ do
 	colorCorrection.Contrast = 0.1
 	colorCorrection.Parent = Lighting
 	makeToggle(fovColors, 195, "Color correction", false, function(value) colorCorrection.Enabled = value end)
-	makeToggle(fovColors, 227, "FOV circle", true, function(value) circle.Visible = value end)
+	makeToggle(fovColors, 227, "FOV circle", true, function(value)
+		showFovCircle = value
+		circle.Visible = value and fovLimitEnabled
+	end)
 
 	local targetDot = Instance.new("Frame")
 	targetDot.Name = "TargetDot"

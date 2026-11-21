@@ -11,7 +11,8 @@ target indicators, ESP styles, movement controls, and camera and lighting
 effects. Flight uses WASD, Space and Ctrl. Speed, flight, visual effects and
 prediction are disabled by default; the triggerbot and checks are enabled.
 Use the prediction toggle and enter a custom lead time from 0 to 1 second in
-the Aimbot tab. The FOV limit and FOV circle have independent toggles.
+the Aimbot tab. Its FOV toggle removes the targeting limit and hides the circle.
+The FOV circle can also be hidden separately in the Visuals tab.
 
 The triggerbot compatibility scan can kick the player if it finds no supported
 tool. Disabling the triggerbot or compatibility scan cancels pending scans;
