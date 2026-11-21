@@ -1382,21 +1382,20 @@ local function attemptLocalFire()
 	local tool = getEquippedTool()
 	if tool and isGun(tool) and canShoot then
 		canShoot = false
+		local activated, activationError = pcall(function() tool:Activate() end)
+		if not activated then
+			task.delay(0.25, function() canShoot = true end)
+			warn("Triggerbot failed to activate " .. tool.Name .. ": " .. tostring(activationError))
+			return false
+		end
 		autoFired = true
-
-		pcall(function()
-			tool:Activate()
-			if tool:IsA("Tool") and tool:FindFirstChildOfClass("RemoteEvent") == nil then
-				if tool:FindFirstChild("Handle") then
-					task.wait(0.01)
-					tool:Deactivate()
-				else
-					tool:Deactivate()
-				end
-			else
-				tool:Deactivate()
-			end
-		end)
+		if tool:FindFirstChildOfClass("RemoteEvent") == nil and tool:FindFirstChild("Handle") then
+			task.wait(0.01)
+		end
+		local deactivated, deactivationError = pcall(function() tool:Deactivate() end)
+		if not deactivated then
+			warn("Triggerbot failed to deactivate " .. tool.Name .. ": " .. tostring(deactivationError))
+		end
 
 		local delayTime = shotDelays[math.random(1, #shotDelays)]
 		task.delay(delayTime, function()
@@ -1451,15 +1450,14 @@ local function isValidTarget(instance)
 	if not instance then return false end
 
 	local model = instance:FindFirstAncestorOfClass("Model")
-	if not model then return false end
-
-	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return false end
-
-	local targetPlayer = Players:GetPlayerFromCharacter(model)
-	if not targetPlayer or isFriendly(targetPlayer) then return false end
-	if isRagdolled(model) then return false end
-	return true
+	while model do
+		local targetPlayer = Players:GetPlayerFromCharacter(model)
+		if targetPlayer then
+			return not isFriendly(targetPlayer) and not isRagdolled(model)
+		end
+		model = model:FindFirstAncestorOfClass("Model")
+	end
+	return false
 end
 
 local function handleMouseMovement()
@@ -1472,8 +1470,12 @@ local function handleMouseMovement()
 		return
 	end
 
-	local origin = workspace.CurrentCamera.CFrame.Position
-	local direction = (mouse.Hit.Position - origin).Unit * 1000
+	local camera = workspace.CurrentCamera
+	if not camera then return end
+	local origin = camera.CFrame.Position
+	local offset = mouse.Hit.Position - origin
+	if offset.Magnitude == 0 then return end
+	local direction = offset.Unit * 1000
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Blacklist
 	params.FilterDescendantsInstances = { player.Character }
@@ -1482,10 +1484,11 @@ local function handleMouseMovement()
 	if result and isValidTarget(result.Instance) then
 		local distance = (result.Position - origin).Magnitude
 
-		if tool.Name:lower():find("revolver") and distance > 200 then
+		local toolName = tool.Name:lower()
+		if toolName:find("revolver", 1, true) and distance > 200 then
 			lastTarget = nil
 			return
-		elseif tool.Name:lower():find("double-barrel") or tool.Name:lower():find("shotgun") and distance > 75 then
+		elseif (toolName:find("double-barrel", 1, true) or toolName:find("shotgun", 1, true)) and distance > 75 then
 			lastTarget = nil
 			return
 		end

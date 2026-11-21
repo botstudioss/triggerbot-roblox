@@ -2,6 +2,9 @@
 
 Only startup and Camlock events produce notifications. Invalid keybinds and
 prediction values are shown in the settings menu.
+With the menu closed, hold left-click over an eligible player to use the
+triggerbot. Revolver shots are limited to 200 studs and shotgun shots to 75
+studs; unsupported weapon or game behavior can still prevent firing.
 
 The **Aim modes** tab adds a separate camera aimbot and experimental Silent Aim.
 Both have independent FOV radii, circles, limits, target parts, team checks and

@@ -31,6 +31,8 @@ Enum = {
 	RenderPriority = {Camera = {Value = 200}}, RaycastFilterType = {Exclude = 1, Blacklist = 1},
 	ScrollingDirection = {Y = 1}, HighlightDepthMode = {AlwaysOnTop = 1}, Material = {Air = "Air"},
 	ContextActionResult = {Pass = "Pass", Sink = "Sink"},
+	UserInputState = {Begin = "Begin", End = "End"},
+	HumanoidStateType = {Physics = "Physics", Dead = "Dead", FallingDown = "FallingDown"},
 	ApplyStrokeMode = {Border = 1},
 }
 RaycastParams = {new = function() return {} end}
@@ -71,6 +73,7 @@ local root = {Position = vec(5, 10, 5), CFrame = vec(5, 10, 5)}
 local equipped
 local character = {
 	ChildAdded = event(), ChildRemoved = event(),
+	GetChildren = function() return equipped and {equipped} or {} end,
 	FindFirstChildOfClass = function(_, class)
 		if class == "Humanoid" then return humanoid end
 		if class == "Tool" then return equipped end
@@ -114,7 +117,10 @@ local services = {
 }
 game = {GetService = function(_, name) return services[name] end, GetChildren = function() return {} end}
 local scheduled = {}
-task = {spawn = function(callback) table.insert(scheduled, callback) end}
+task = {
+	spawn = function(callback) table.insert(scheduled, callback) end,
+	delay = function(_, callback) callback() end,
+}
 local camera = {
 	CFrame = {Position = vec(0, 0, 0), LookVector = vec(0, 0, 1), RightVector = vec(1, 0, 0)},
 	ViewportSize = vec(800, 600), FieldOfView = 70,
@@ -449,6 +455,75 @@ click("[x] Color correction")
 assert(not find("ColorCorrectionEffect", "AzureColorCorrection").Enabled)
 click("[x] ESP")
 assert(not box.Visible and not find("Frame", "Tracer").Visible)
+
+press("RightShift")
+local now, shots = 0, 0
+tick = function() return now end
+targetHumanoid.GetState = function() return "Running" end
+targetCharacter.IsA = function(_, name) return name == "Model" end
+targetCharacter.GetDescendants = function()
+	return {{IsA = function(_, name) return name == "Motor6D" end}}
+end
+players.GetPlayerFromCharacter = function(_, model) if model == targetCharacter then return target end end
+head.FindFirstAncestorOfClass = function() return targetCharacter end
+mouseObject.Hit = {Position = vec(0, 0, 50)}
+local hitPart, hitPosition = head, vec(0, 0, 50)
+workspace.Raycast = function() return {Instance = hitPart, Position = hitPosition} end
+local function weapon(name)
+	return {
+		Name = name,
+		IsA = function(_, kind) return kind == "Tool" end,
+		FindFirstChild = function() end,
+		FindFirstChildOfClass = function() end,
+		Activate = function() shots = shots + 1 end,
+		Deactivate = function() end,
+	}
+end
+local function heldShot()
+	assert(blockClick("BlockMouseClick", "Begin") == "Sink")
+	run.RenderStepped:fire()
+	now = now + 1
+	blockClick("BlockMouseClick", "End")
+end
+equipped = weapon("[Double-Barrel SG]")
+heldShot()
+assert(shots == 1)
+hitPosition = vec(0, 0, 76)
+heldShot()
+assert(shots == 1, "Expected no additional DB shot; got " .. shots)
+equipped = weapon("[Revolver]")
+hitPosition = vec(0, 0, 199)
+heldShot()
+assert(shots == 2)
+hitPosition = vec(0, 0, 201)
+heldShot()
+assert(shots == 2)
+local nestedModel = {FindFirstAncestorOfClass = function() return targetCharacter end}
+hitPart = {FindFirstAncestorOfClass = function() return nestedModel end}
+hitPosition = vec(0, 0, 50)
+heldShot()
+assert(shots == 3)
+target.Team = "Blue"
+heldShot()
+assert(shots == 3)
+target.Team = "Red"
+workspace.CurrentCamera = nil
+heldShot()
+assert(shots == 3)
+workspace.CurrentCamera = camera
+mouseObject.Hit = {Position = camera.CFrame.Position}
+heldShot()
+assert(shots == 3)
+mouseObject.Hit = {Position = vec(0, 0, 50)}
+local warning
+warn = function(message) warning = message end
+equipped.Activate = function() error("activation failed") end
+heldShot()
+assert(shots == 3 and warning:find("Triggerbot failed to activate", 1, true))
+equipped = weapon("[Revolver]")
+heldShot()
+assert(shots == 4)
+
 players.PlayerRemoving:fire(target)
 assert(box.destroyed and find("Frame", "Tracer").destroyed)
 for index = 2, #titles do assert(titles[index] == "Camlock") end
