@@ -88,9 +88,12 @@ local character = {
 }
 local kicks = 0
 local mouseObject = {}
+local attributes = {}
 local player = {
 	Team = "Blue", Character = character, CharacterAdded = event(),
 	GetMouse = function() return mouseObject end, WaitForChild = function() return {} end,
+	GetAttribute = function(_, name) return attributes[name] end,
+	SetAttribute = function(_, name, value) attributes[name] = value end,
 	Kick = function() kicks = kicks + 1 end,
 }
 local players = {LocalPlayer = player, PlayerAdded = event(), PlayerRemoving = event()}
@@ -222,6 +225,49 @@ method = "Raycast"
 click("[x] Silent aim")
 _, direction = hooks.__namecall(workspace, vec(0, 0, 0), vec(0, 0, 100))
 assert(direction.X == 0)
+click("Method: Raycast")
+click("[ ] Silent aim")
+assert(find("TextLabel", "Z ZHD mode is only for Z ZHD."))
+game.PlaceId = 138014591158268
+click("[ ] Silent aim")
+assert(find("TextLabel", "Z ZHD: turn wall and team checks off."))
+click("[x] Silent wall check")
+click("[x] Silent team check")
+attributes.AimLock, attributes.AimLockFov, attributes.TargetLimb = false, 40, "Torso"
+equipped = {Name = "[Revolver]"}
+click("[ ] Silent aim")
+assert(attributes.AimLock == true and attributes.AimLockFov == 35 and attributes.TargetLimb == "Head")
+equipped = {Name = "Other"}
+run.RenderStepped:fire()
+assert(attributes.AimLock == false)
+equipped = {Name = "[Double-Barrel SG]"}
+run.RenderStepped:fire()
+assert(attributes.AimLock == true)
+press("RightShift")
+assert(attributes.AimLock == false)
+press("RightShift")
+assert(attributes.AimLock == true)
+find("TextButton", "SilentFOVDecrease").MouseButton1Click:fire()
+assert(attributes.AimLockFov == 30)
+local silentSection = find("TextLabel", "SilentAimStatus").Parent
+for _, object in ipairs(objects) do
+	if object.class == "TextButton" and object.Parent == silentSection and object.Text == "Target: Head" then
+		object.MouseButton1Click:fire()
+		break
+	end
+end
+assert(attributes.TargetLimb == "HumanoidRootPart")
+click("[ ] Silent team check")
+assert(find("TextLabel", "Z ZHD does not support team checks."))
+click("[x] Silent FOV limit")
+assert(find("TextLabel", "Z ZHD requires an FOV limit."))
+attributes.TargetLimb = "External"
+click("[x] Silent aim")
+assert(attributes.AimLock == false and attributes.AimLockFov == 40 and attributes.TargetLimb == "External")
+click("Method: Z ZHD")
+click("[ ] Silent wall check")
+click("[ ] Silent team check")
+find("TextButton", "SilentFOVIncrease").MouseButton1Click:fire()
 equipped = nil
 head.Position = vec(20, 0, 10)
 

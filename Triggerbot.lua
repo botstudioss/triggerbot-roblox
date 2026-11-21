@@ -143,6 +143,46 @@ end)
 
 local mouseHookInstalled, rayHookInstalled = false, false
 local rawMouseMetatable, rawRayMetatable
+local gameAimAttributes
+local function updateGameAim()
+	if not gameAimAttributes then return end
+	local character = player.Character
+	local tool = character and character:FindFirstChildOfClass("Tool")
+	local supported = tool and (tool.Name == "[Revolver]" or tool.Name == "[Double-Barrel SG]"
+		or tool.Name == "[TacticalShotgun]")
+	local values = {
+		AimLock = not menuOpen and supported == true,
+		AimLockFov = silent.radius / 5,
+		TargetLimb = silent.part,
+	}
+	for _, entry in ipairs(gameAimAttributes) do
+		local value = values[entry.name]
+		if player:GetAttribute(entry.name) ~= value then
+			player:SetAttribute(entry.name, value)
+		end
+		entry.applied = value
+	end
+end
+local function stopGameAim()
+	if not gameAimAttributes then return end
+	for _, entry in ipairs(gameAimAttributes) do
+		if player:GetAttribute(entry.name) == entry.applied then
+			player:SetAttribute(entry.name, entry.original)
+		end
+	end
+	gameAimAttributes = nil
+end
+local function startGameAim()
+	if game.PlaceId ~= 138014591158268 then return false, "Z ZHD mode is only for Z ZHD." end
+	if silent.wall or silent.team then return false, "Z ZHD: turn wall and team checks off." end
+	if not silent.limit or silent.radius < 50 then return false, "Z ZHD: use FOV limit of at least 50." end
+	gameAimAttributes = {}
+	for _, name in ipairs({"AimLock", "AimLockFov", "TargetLimb"}) do
+		table.insert(gameAimAttributes, {name = name, original = player:GetAttribute(name)})
+	end
+	updateGameAim()
+	return true
+end
 local function silentTarget()
 	if not silent.enabled or menuOpen then return nil end
 	local character = player.Character
@@ -796,40 +836,69 @@ do
 		silentStatus.Text = message
 		silentStatus.TextColor3 = Color3.fromRGB(255, 115, 115)
 	end
+	local function refreshSilentStatus()
+		silentStatus.Text = silent.method == "Z ZHD" and "Z ZHD: no prediction; server may reject." or ""
+		silentStatus.TextColor3 = theme.muted
+	end
+	local function startSilent(method)
+		if method == "Z ZHD" then return startGameAim() end
+		return installSilentHook(method)
+	end
 	makeToggle(silentSection, 35, "Silent aim", false, function(value)
 		if value then
-			local ok, err = installSilentHook(silent.method)
+			local ok, err = startSilent(silent.method)
 			if not ok then silentError(err); return false end
+		else
+			stopGameAim()
 		end
 		silent.enabled = value
 		silent.target = nil
-		silentStatus.Text = ""
-		silentStatus.TextColor3 = theme.muted
+		refreshSilentStatus()
 	end)
 	local methodButton = makeButton(silentSection, 67)
 	local function refreshMethod() methodButton.Text = "Method: " .. silent.method end
 	refreshMethod()
 	methodButton.MouseButton1Click:Connect(function()
-		local method = silent.method == "Mouse" and "Raycast" or "Mouse"
+		local method = silent.method == "Mouse" and "Raycast"
+			or silent.method == "Raycast" and "Z ZHD" or "Mouse"
 		if silent.enabled then
-			local ok, err = installSilentHook(method)
+			local ok, err = startSilent(method)
 			if not ok then silentError(err); return end
+			if silent.method == "Z ZHD" then stopGameAim() end
 		end
 		silent.method = method
-		silentStatus.Text = ""
-		silentStatus.TextColor3 = theme.muted
+		refreshSilentStatus()
 		refreshMethod()
 	end)
-	makeToggle(silentSection, 99, "Silent FOV limit", true, function(value) silent.limit = value end)
+	makeToggle(silentSection, 99, "Silent FOV limit", true, function(value)
+		if not value and silent.enabled and silent.method == "Z ZHD" then
+			silentError("Z ZHD requires an FOV limit.")
+			return false
+		end
+		silent.limit = value
+	end)
 	makeToggle(silentSection, 131, "Silent FOV circle", false, function(value) showSilentCircle = value end)
-	makeToggle(silentSection, 163, "Silent wall check", true, function(value) silent.wall = value end)
-	makeToggle(silentSection, 195, "Silent team check", true, function(value) silent.team = value end)
+	makeToggle(silentSection, 163, "Silent wall check", true, function(value)
+		if value and silent.enabled and silent.method == "Z ZHD" then
+			silentError("Z ZHD does not support wall checks.")
+			return false
+		end
+		silent.wall = value
+	end)
+	makeToggle(silentSection, 195, "Silent team check", true, function(value)
+		if value and silent.enabled and silent.method == "Z ZHD" then
+			silentError("Z ZHD does not support team checks.")
+			return false
+		end
+		silent.team = value
+	end)
 	local silentPartButton = makeButton(silentSection, 227)
 	local function refreshSilentPart() silentPartButton.Text = "Target: " .. silent.part end
 	refreshSilentPart()
 	silentPartButton.MouseButton1Click:Connect(function()
 		silent.part = silent.part == "Head" and "HumanoidRootPart" or "Head"
 		silent.target = nil
+		updateGameAim()
 		refreshSilentPart()
 	end)
 	local silentRadius = makeLabel(silentSection, "", 259)
@@ -837,10 +906,19 @@ do
 	refreshSilentRadius()
 	local silentMinus = makeButton(silentSection, 291, 104, 8)
 	silentMinus.Name, silentMinus.Text = "SilentFOVDecrease", "-"
-	silentMinus.MouseButton1Click:Connect(function() silent.radius = math.max(25, silent.radius - 25); refreshSilentRadius() end)
+	silentMinus.MouseButton1Click:Connect(function()
+		local minimum = silent.enabled and silent.method == "Z ZHD" and 50 or 25
+		silent.radius = math.max(minimum, silent.radius - 25)
+		updateGameAim()
+		refreshSilentRadius()
+	end)
 	local silentPlus = makeButton(silentSection, 291, 104, 124)
 	silentPlus.Name, silentPlus.Text = "SilentFOVIncrease", "+"
-	silentPlus.MouseButton1Click:Connect(function() silent.radius = math.min(1000, silent.radius + 25); refreshSilentRadius() end)
+	silentPlus.MouseButton1Click:Connect(function()
+		silent.radius = math.min(1000, silent.radius + 25)
+		updateGameAim()
+		refreshSilentRadius()
+	end)
 
 	makeToggle(teamSection, 35, "Team check", true, function(value) IGNORE_TEAMMATES = value end)
 	makeLabel(teamSection, "Existing locks stay active behind walls.", 70, 50)
@@ -1147,6 +1225,7 @@ do
 		if key == keys.Menu then
 			menu.Visible = not menu.Visible
 			menuOpen = menu.Visible
+			updateGameAim()
 			targetStats.Active = menuOpen
 			stopMenuDrag()
 			stopStatsDrag()
@@ -1189,6 +1268,7 @@ do
 	end)
 
 	RunService.RenderStepped:Connect(function()
+		updateGameAim()
 		local mousePosition = UserInputService:GetMouseLocation()
 		circle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
 		circle.Size = UDim2.fromOffset(fovRadius * 2, fovRadius * 2)
@@ -1199,7 +1279,7 @@ do
 		silentCircle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
 		silentCircle.Size = UDim2.fromOffset(silent.radius * 2, silent.radius * 2)
 		silentCircle.Visible = showSilentCircle and silent.limit
-		silent.target = silent.enabled and not menuOpen and getClosestPlayer(silent) or nil
+		silent.target = silent.enabled and silent.method ~= "Z ZHD" and not menuOpen and getClosestPlayer(silent) or nil
 
 		local camera = workspace.CurrentCamera
 		if cameraFovEnabled and camera then

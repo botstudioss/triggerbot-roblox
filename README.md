@@ -21,6 +21,16 @@ work. Unsupported hook APIs are reported in the menu.
 Some Xeno versions may lack these APIs; the menu identifies the missing one
 and keeps Silent Aim off rather than claiming it is working.
 
+The experimental **Z ZHD** Silent Aim method instead enables the game's
+client aim-lock attributes; it does not need executor hooks. Select the method,
+turn Silent wall and team checks off, keep the Silent FOV limit enabled at 50
+or more, and enable Silent Aim. The game selects targets itself, without
+prediction or these checks, and may validate or reject shots on the server.
+This method is restricted to Z ZHD and has not been verified in-game. It
+activates only with a Revolver, Double-Barrel or Tactical Shotgun equipped and
+the menu closed. It restores the attributes it changed when disabled; an existing gamepass or
+character aim-lock setting can keep the game's aim lock active independently.
+
 In **Visuals > ESP filters**, enable the distance limit and enter the maximum
 distance in studs (1–100000). Enable **ESP named only** to show only players
 listed in **Target usernames**. Enter comma-separated Roblox usernames, not
