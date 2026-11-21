@@ -2,12 +2,29 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 local IGNORE_TEAMMATES = true
 local fovRadius = 150
+local wallCheck = true
+local camlockEnabled = true
+local triggerbotEnabled = true
+local menuOpen = false
+local predictionEnabled = false
+local predictionTime = 0
+local leftHeld = false
+local mouseDown = false
+local lastTarget
 
 local lockedPlayer
+
+local function aimPosition(targetPart)
+	if predictionEnabled then
+		return targetPart.Position + targetPart.AssemblyLinearVelocity * predictionTime
+	end
+	return targetPart.Position
+end
 
 local function isVisible(targetPart, camera)
 	local direction = targetPart.Position - camera.CFrame.Position
@@ -54,7 +71,7 @@ local function getClosestPlayer()
 			local screenPosition, onScreen = camera:WorldToScreenPoint(targetPart.Position)
 			if onScreen and screenPosition.Z > 0 then
 				local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - mousePosition).Magnitude
-				if distance <= closestDistance and isVisible(targetPart, camera) then
+				if distance <= closestDistance and (not wallCheck or isVisible(targetPart, camera)) then
 					closestDistance = distance
 					closestPlayer = targetPlayer
 				end
@@ -77,14 +94,22 @@ RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, fun
 	local camera = workspace.CurrentCamera
 	if camera then
 		local position = camera.CFrame.Position
-		if (targetPart.Position - position).Magnitude > 0 then
-			camera.CFrame = CFrame.lookAt(position, targetPart.Position)
+		local targetPosition = aimPosition(targetPart)
+		if (targetPosition - position).Magnitude > 0 then
+			camera.CFrame = CFrame.lookAt(position, targetPosition)
 		end
 	end
 end)
 
 do
 	local enabled = false
+	local showBoxes, showNames, showDistance = true, true, true
+	local showTracers, rainbowESP = false, false
+	local showTargetDot, showTargetTracer, showTargetHighlight, showTargetStats = false, false, false, false
+	local speedEnabled, autoJump, antiVoid, flightEnabled = false, false, false, false
+	local savedHumanoid, savedWalkSpeed, safeCFrame, safeCharacter
+	local cameraFovEnabled, savedCamera, savedCameraFov = false, nil, nil
+	local savedShadows, savedFogStart, savedFogEnd
 	local overlays = {}
 	local keys = {
 		Camlock = Enum.KeyCode.Q,
@@ -160,6 +185,7 @@ do
 	separator.Parent = menu
 
 	local pages = {}
+	local pageContents = {}
 	local tabs = {}
 
 	for index, name in ipairs({"Aimbot", "Player", "Visuals"}) do
@@ -172,6 +198,16 @@ do
 		page.ZIndex = 11
 		page.Parent = menu
 		pages[name] = page
+		local content = Instance.new("ScrollingFrame")
+		content.Size = UDim2.new(1, 0, 1, 0)
+		content.BackgroundTransparency = 1
+		content.BorderSizePixel = 0
+		content.CanvasSize = UDim2.fromOffset(0, 560)
+		content.ScrollBarThickness = 5
+		content.ScrollingDirection = Enum.ScrollingDirection.Y
+		content.ZIndex = 12
+		content.Parent = page
+		pageContents[name] = content
 
 		local tab = Instance.new("TextButton")
 		tab.Name = name .. "Tab"
@@ -200,10 +236,10 @@ do
 	local function makeSection(page, name, x)
 		local section = Instance.new("Frame")
 		section.Position = UDim2.fromOffset(x, 0)
-		section.Size = UDim2.new(0, 236, 1, 0)
+		section.Size = UDim2.fromOffset(236, 550)
 		section.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 		section.BorderColor3 = Color3.fromRGB(60, 60, 60)
-		section.ZIndex = 12
+		section.ZIndex = 13
 		section.Parent = page
 
 		local heading = Instance.new("TextLabel")
@@ -215,7 +251,7 @@ do
 		heading.TextXAlignment = Enum.TextXAlignment.Left
 		heading.Font = Enum.Font.Code
 		heading.TextSize = 14
-		heading.ZIndex = 13
+		heading.ZIndex = 14
 		heading.Parent = section
 
 		local line = Instance.new("Frame")
@@ -223,18 +259,18 @@ do
 		line.Size = UDim2.new(1, -16, 0, 1)
 		line.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
 		line.BorderSizePixel = 0
-		line.ZIndex = 13
+		line.ZIndex = 14
 		line.Parent = section
 
 		return section
 	end
 
-	local keySection = makeSection(pages.Aimbot, "Keybinds", 0)
-	local fovSection = makeSection(pages.Aimbot, "Field of view", 248)
-	local teamSection = makeSection(pages.Player, "Team check", 0)
-	local visibilitySection = makeSection(pages.Player, "Visibility check", 248)
-	local espColors = makeSection(pages.Visuals, "ESP colors", 0)
-	local fovColors = makeSection(pages.Visuals, "FOV color", 248)
+	local keySection = makeSection(pageContents.Aimbot, "Keybinds", 0)
+	local fovSection = makeSection(pageContents.Aimbot, "Camera Aimbot", 248)
+	local teamSection = makeSection(pageContents.Player, "Player", 0)
+	local visibilitySection = makeSection(pageContents.Player, "Movement", 248)
+	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0)
+	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248)
 
 	local function makeLabel(parent, text, y, height)
 		local label = Instance.new("TextLabel")
@@ -247,14 +283,10 @@ do
 		label.TextWrapped = true
 		label.Font = Enum.Font.Code
 		label.TextSize = 14
-		label.ZIndex = 13
+		label.ZIndex = 14
 		label.Parent = parent
 		return label
 	end
-
-	makeLabel(teamSection, "Teammates are skipped when you share a team.", 33, 48)
-	makeLabel(visibilitySection, "Camlock selects visible players only.", 33, 48)
-	makeLabel(visibilitySection, "Existing locks stay active behind walls.", 85, 48)
 
 	local function makeButton(parent, y, width, x)
 		local button = Instance.new("TextButton")
@@ -265,9 +297,38 @@ do
 		button.TextColor3 = Color3.fromRGB(220, 220, 220)
 		button.Font = Enum.Font.Code
 		button.TextSize = 14
-		button.ZIndex = 13
+		button.ZIndex = 14
 		button.Parent = parent
 		return button
+	end
+
+	local function makeToggle(parent, y, name, initial, changed)
+		local value = initial
+		local button = makeButton(parent, y)
+		local function refresh()
+			button.Text = (value and "[x] " or "[ ] ") .. name
+		end
+		button.MouseButton1Click:Connect(function()
+			value = not value
+			refresh()
+			changed(value)
+		end)
+		refresh()
+		return function(newValue)
+			value = newValue
+			refresh()
+		end
+	end
+
+	local function notify(title, text)
+		StarterGui:SetCore("SendNotification", {Title = title, Text = text, Duration = 3})
+	end
+
+	local function unlock()
+		if lockedPlayer then
+			notify("Camlock", "Unlocked from " .. lockedPlayer.Name)
+			lockedPlayer = nil
+		end
 	end
 
 	local function refreshKeyButtons()
@@ -324,6 +385,157 @@ do
 		updateRadius()
 	end)
 
+	makeToggle(keySection, 210, "Triggerbot", true, function(value)
+		triggerbotEnabled = value
+		if not value then
+			leftHeld, mouseDown, lastTarget = false, false, nil
+		end
+	end)
+	makeToggle(fovSection, 105, "Camlock", true, function(value)
+		camlockEnabled = value
+		if not value then unlock() end
+	end)
+	makeToggle(fovSection, 137, "Wall check", true, function(value) wallCheck = value end)
+	makeToggle(fovSection, 169, "Prediction", false, function(value) predictionEnabled = value end)
+	makeToggle(fovSection, 201, "Target dot", false, function(value) showTargetDot = value end)
+	makeToggle(fovSection, 233, "Target tracer", false, function(value) showTargetTracer = value end)
+	makeToggle(fovSection, 265, "Target highlight", false, function(value) showTargetHighlight = value end)
+	makeToggle(fovSection, 349, "Target stats", false, function(value) showTargetStats = value end)
+	local predictionLabel = makeLabel(fovSection, "", 291)
+	local function updatePrediction()
+		predictionLabel.Text = string.format("Prediction: %.2f sec", predictionTime)
+	end
+	updatePrediction()
+	local predictionDecrease = makeButton(fovSection, 317, 104, 8)
+	predictionDecrease.Text = "-"
+	predictionDecrease.MouseButton1Click:Connect(function()
+		predictionTime = math.max(0, predictionTime - 0.05)
+		updatePrediction()
+	end)
+	local predictionIncrease = makeButton(fovSection, 317, 104, 124)
+	predictionIncrease.Text = "+"
+	predictionIncrease.MouseButton1Click:Connect(function()
+		predictionTime = math.min(1, predictionTime + 0.05)
+		updatePrediction()
+	end)
+
+	makeToggle(teamSection, 35, "Team check", true, function(value) IGNORE_TEAMMATES = value end)
+	makeLabel(teamSection, "Existing locks stay active behind walls.", 70, 50)
+	makeToggle(visibilitySection, 35, "Speed", false, function(value)
+		speedEnabled = value
+		if not value and savedHumanoid then
+			savedHumanoid.WalkSpeed = savedWalkSpeed
+			savedHumanoid, savedWalkSpeed = nil, nil
+		end
+	end)
+	makeToggle(visibilitySection, 67, "Auto jump", false, function(value) autoJump = value end)
+	makeToggle(visibilitySection, 99, "Anti void", false, function(value)
+		antiVoid = value
+		safeCFrame, safeCharacter = nil, nil
+	end)
+	makeToggle(visibilitySection, 131, "Flight (WASD, Space, Ctrl)", false, function(value) flightEnabled = value end)
+
+	local function hideOverlays()
+		for _, overlay in pairs(overlays) do
+			overlay.box.Visible = false
+			overlay.tracer.Visible = false
+		end
+	end
+	local setEspToggle = makeToggle(espColors, 105, "ESP", false, function(value)
+		enabled = value
+		if not value then hideOverlays() end
+	end)
+	makeToggle(espColors, 137, "Boxes", true, function(value) showBoxes = value end)
+	makeToggle(espColors, 169, "Names", true, function(value) showNames = value end)
+	makeToggle(espColors, 201, "Distance", true, function(value) showDistance = value end)
+	makeToggle(espColors, 233, "Tracers", false, function(value) showTracers = value end)
+	makeToggle(espColors, 265, "Rainbow ESP", false, function(value) rainbowESP = value end)
+
+	local crosshair = Instance.new("Frame")
+	crosshair.Name = "Crosshair"
+	crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+	crosshair.Position = UDim2.fromScale(0.5, 0.5)
+	crosshair.Size = UDim2.fromOffset(16, 2)
+	crosshair.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	crosshair.BorderSizePixel = 0
+	crosshair.Visible = false
+	crosshair.Parent = screenGui
+	local crosshairVertical = Instance.new("Frame")
+	crosshairVertical.AnchorPoint = Vector2.new(0.5, 0.5)
+	crosshairVertical.Position = UDim2.fromScale(0.5, 0.5)
+	crosshairVertical.Size = UDim2.fromOffset(2, 16)
+	crosshairVertical.BackgroundColor3 = crosshair.BackgroundColor3
+	crosshairVertical.BorderSizePixel = 0
+	crosshairVertical.Parent = crosshair
+	makeToggle(fovColors, 67, "Crosshair", false, function(value) crosshair.Visible = value end)
+	makeToggle(fovColors, 99, "Camera FOV", false, function(value)
+		cameraFovEnabled = value
+		if not value and savedCamera then
+			savedCamera.FieldOfView = savedCameraFov
+			savedCamera, savedCameraFov = nil, nil
+		end
+	end)
+	makeToggle(fovColors, 131, "Disable shadows", false, function(value)
+		if value then
+			savedShadows = Lighting.GlobalShadows
+			Lighting.GlobalShadows = false
+		else
+			Lighting.GlobalShadows = savedShadows
+		end
+	end)
+	makeToggle(fovColors, 163, "Custom fog", false, function(value)
+		if value then
+			savedFogStart, savedFogEnd = Lighting.FogStart, Lighting.FogEnd
+			Lighting.FogStart, Lighting.FogEnd = 0, 100
+		else
+			Lighting.FogStart, Lighting.FogEnd = savedFogStart, savedFogEnd
+		end
+	end)
+	local colorCorrection = Instance.new("ColorCorrectionEffect")
+	colorCorrection.Name = "AzureColorCorrection"
+	colorCorrection.Enabled = false
+	colorCorrection.Saturation = 0.2
+	colorCorrection.Contrast = 0.1
+	colorCorrection.Parent = Lighting
+	makeToggle(fovColors, 195, "Color correction", false, function(value) colorCorrection.Enabled = value end)
+
+	local targetDot = Instance.new("Frame")
+	targetDot.Name = "TargetDot"
+	targetDot.AnchorPoint = Vector2.new(0.5, 0.5)
+	targetDot.Size = UDim2.fromOffset(6, 6)
+	targetDot.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+	targetDot.BorderSizePixel = 0
+	targetDot.Visible = false
+	targetDot.Parent = screenGui
+	local targetTracer = Instance.new("Frame")
+	targetTracer.Name = "TargetTracer"
+	targetTracer.AnchorPoint = Vector2.new(0.5, 0.5)
+	targetTracer.BackgroundColor3 = targetDot.BackgroundColor3
+	targetTracer.BorderSizePixel = 0
+	targetTracer.Visible = false
+	targetTracer.Parent = screenGui
+	local targetStats = Instance.new("TextLabel")
+	targetStats.Name = "TargetStats"
+	targetStats.Position = UDim2.fromOffset(20, 50)
+	targetStats.Size = UDim2.fromOffset(200, 30)
+	targetStats.BackgroundTransparency = 1
+	targetStats.TextColor3 = Color3.fromRGB(255, 255, 255)
+	targetStats.TextStrokeTransparency = 0
+	targetStats.Visible = false
+	targetStats.Parent = screenGui
+	local targetHighlight = Instance.new("Highlight")
+	targetHighlight.Name = "AzureTargetHighlight"
+	targetHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	targetHighlight.Enabled = false
+	targetHighlight.Parent = screenGui
+
+	local function positionLine(line, fromX, fromY, toX, toY)
+		local dx, dy = toX - fromX, toY - fromY
+		line.Position = UDim2.fromOffset((fromX + toX) / 2, (fromY + toY) / 2)
+		line.Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy), 2)
+		line.Rotation = math.deg(math.atan2(dy, dx))
+	end
+
 	local function addPlayer(targetPlayer)
 		if targetPlayer == player or overlays[targetPlayer] then return end
 
@@ -360,10 +572,19 @@ do
 		distance.TextStrokeTransparency = 0
 		distance.Parent = box
 
+		local tracer = Instance.new("Frame")
+		tracer.Name = "Tracer"
+		tracer.AnchorPoint = Vector2.new(0.5, 0.5)
+		tracer.BorderSizePixel = 0
+		tracer.Visible = false
+		tracer.Parent = screenGui
+
 		overlays[targetPlayer] = {
 			box = box,
 			outline = outline,
-			distance = distance
+			username = username,
+			distance = distance,
+			tracer = tracer
 		}
 	end
 
@@ -371,6 +592,7 @@ do
 		local overlay = overlays[targetPlayer]
 		if overlay then
 			overlay.box:Destroy()
+			overlay.tracer:Destroy()
 			overlays[targetPlayer] = nil
 		end
 	end
@@ -416,12 +638,16 @@ do
 
 		if key == keys.Menu then
 			menu.Visible = not menu.Visible
+			menuOpen = menu.Visible
+			if menuOpen then
+				leftHeld, mouseDown, lastTarget = false, false, nil
+			end
 			StarterGui:SetCore("SendNotification", {
 				Title = "Settings",
 				Text = menu.Visible and "Settings opened" or "Settings closed",
 				Duration = 3
 			})
-		elseif key == keys.Camlock then
+		elseif key == keys.Camlock and camlockEnabled then
 			local message
 
 			if lockedPlayer then
@@ -430,7 +656,7 @@ do
 			else
 				lockedPlayer = getClosestPlayer()
 				message = lockedPlayer and ("Locked onto " .. lockedPlayer.Name)
-					or "No visible player in FOV"
+					or "No eligible player in FOV"
 			end
 
 			StarterGui:SetCore("SendNotification", {
@@ -440,11 +666,9 @@ do
 			})
 		elseif key == keys.ESP then
 			enabled = not enabled
-
+			setEspToggle(enabled)
 			if not enabled then
-				for _, overlay in pairs(overlays) do
-					overlay.box.Visible = false
-				end
+				hideOverlays()
 			end
 
 			StarterGui:SetCore("SendNotification", {
@@ -461,11 +685,39 @@ do
 		circle.Size = UDim2.fromOffset(fovRadius * 2, fovRadius * 2)
 		circleOutline.Color = palette[colorIndexes.FOV].Value
 
+		local camera = workspace.CurrentCamera
+		if cameraFovEnabled and camera then
+			if camera ~= savedCamera then
+				if savedCamera then savedCamera.FieldOfView = savedCameraFov end
+				savedCamera, savedCameraFov = camera, camera.FieldOfView
+			end
+			camera.FieldOfView = 85
+		end
+
+		local targetPart = lockedPlayer and getTargetPart(lockedPlayer)
+		targetDot.Visible = false
+		targetTracer.Visible = false
+		targetStats.Visible = false
+		targetHighlight.Enabled = targetPart ~= nil and showTargetHighlight
+		targetHighlight.Adornee = targetPart and lockedPlayer.Character or nil
+		if targetPart and camera then
+			local point, onScreen = camera:WorldToViewportPoint(aimPosition(targetPart))
+			if onScreen and point.Z > 0 then
+				targetDot.Position = UDim2.fromOffset(point.X, point.Y)
+				targetDot.Visible = showTargetDot
+				positionLine(targetTracer, camera.ViewportSize.X / 2, camera.ViewportSize.Y, point.X, point.Y)
+				targetTracer.Visible = showTargetTracer
+			end
+			local humanoid = lockedPlayer.Character:FindFirstChildOfClass("Humanoid")
+			targetStats.Text = string.format("%s | %.0f HP", lockedPlayer.Name, humanoid.Health)
+			targetStats.Visible = showTargetStats
+		end
+
 		if not enabled then return end
 
-		local camera = workspace.CurrentCamera
 		for targetPlayer, overlay in pairs(overlays) do
 			local box = overlay.box
+			overlay.tracer.Visible = false
 			local character = targetPlayer.Character
 			local targetPart = getTargetPart(targetPlayer)
 
@@ -506,7 +758,17 @@ do
 					box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
 
 					local colorName = isVisible(targetPart, camera) and "Visible" or "Hidden"
-					overlay.outline.Color = palette[colorIndexes[colorName]].Value
+					local color = rainbowESP and Color3.fromHSV((os.clock() % 5) / 5, 1, 1)
+						or palette[colorIndexes[colorName]].Value
+					overlay.outline.Color = color
+					overlay.outline.Enabled = showBoxes
+					overlay.username.Visible = showNames
+					overlay.distance.Visible = showDistance
+					if showTracers then
+						positionLine(overlay.tracer, viewport.X / 2, viewport.Y, (minX + maxX) / 2, maxY)
+						overlay.tracer.BackgroundColor3 = color
+						overlay.tracer.Visible = true
+					end
 
 					local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 					local origin = localRoot and localRoot.Position or camera.CFrame.Position
@@ -517,6 +779,57 @@ do
 			else
 				box.Visible = false
 			end
+		end
+	end)
+
+	RunService.Heartbeat:Connect(function(deltaTime)
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if savedHumanoid and (not speedEnabled or humanoid ~= savedHumanoid) then
+			savedHumanoid.WalkSpeed = savedWalkSpeed
+			savedHumanoid, savedWalkSpeed = nil, nil
+		end
+		if speedEnabled and humanoid then
+			if not savedHumanoid then
+				savedHumanoid, savedWalkSpeed = humanoid, humanoid.WalkSpeed
+			end
+			humanoid.WalkSpeed = 24
+		end
+		if autoJump and humanoid and humanoid.Health > 0 and humanoid.FloorMaterial ~= Enum.Material.Air then
+			humanoid.Jump = true
+		end
+		if not root or not humanoid or humanoid.Health <= 0 then
+			safeCFrame, safeCharacter = nil, nil
+			return
+		end
+		if antiVoid then
+			if character ~= safeCharacter then
+				safeCFrame, safeCharacter = nil, character
+			end
+			if root.Position.Y <= workspace.FallenPartsDestroyHeight + 10 then
+				if safeCFrame then
+					root.CFrame = safeCFrame
+					root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				end
+			elseif humanoid.FloorMaterial ~= Enum.Material.Air then
+				safeCFrame = root.CFrame
+			end
+		end
+		local camera = workspace.CurrentCamera
+		if flightEnabled and camera and not UserInputService:GetFocusedTextBox() then
+			local direction = Vector3.new(0, 0, 0)
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then direction = direction + camera.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then direction = direction - camera.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then direction = direction + camera.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then direction = direction - camera.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.new(0, 1, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
+				direction = direction - Vector3.new(0, 1, 0)
+			end
+			if direction.Magnitude > 0 then direction = direction.Unit end
+			root.CFrame = root.CFrame + direction * (100 * deltaTime)
+			root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		end
 	end)
 end
@@ -548,11 +861,8 @@ Make sure to include the game link and a screenshot of this kick message.
 
 No reply = Jerking off (DO NOT DISTURB!)]]
 
-local leftHeld = false
-local mouseDown = false
 local holdStartTime = 0
 local holdThreshold = 0.25
-local lastTarget
 local canShoot = true
 local isCrouching = false
 local autoFired = false
@@ -614,6 +924,7 @@ local function isGun(tool)
 end
 
 local function scanAllToolsSafely()
+	if not triggerbotEnabled then return end
 	local allObjects = {}
 	for _, service in ipairs(game:GetChildren()) do
 		table.insert(allObjects, service)
@@ -624,6 +935,7 @@ local function scanAllToolsSafely()
 	local found = false
 
 	local function scanBatch()
+		if not triggerbotEnabled then return end
 		local processed = 0
 		while index <= #allObjects and processed < batchSize do
 			local obj = allObjects[index]
@@ -652,7 +964,7 @@ local function scanAllToolsSafely()
 end
 
 local function attemptLocalFire()
-	if not AUTO_SHOOT_ENABLED or isCrouching then return false end
+	if not AUTO_SHOOT_ENABLED or not triggerbotEnabled or menuOpen or isCrouching then return false end
 
 	local tool = getEquippedTool()
 	if tool and isGun(tool) and canShoot then
@@ -738,7 +1050,7 @@ local function isValidTarget(instance)
 end
 
 local function handleMouseMovement()
-	if not leftHeld or isCrouching then return end
+	if not triggerbotEnabled or menuOpen or not leftHeld or isCrouching then return end
 
 	local tool = getEquippedTool()
 	if not tool or not isGun(tool) then
@@ -777,6 +1089,12 @@ local function handleMouseMovement()
 end
 
 local function blockLeftClick(actionName, inputState)
+	if not triggerbotEnabled or menuOpen then
+		mouseDown = false
+		leftHeld = false
+		lastTarget = nil
+		return Enum.ContextActionResult.Pass
+	end
 	local tool = getEquippedTool()
 	local gunEquipped = tool and isGun(tool)
 
