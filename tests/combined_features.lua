@@ -75,7 +75,7 @@ local input = {
 	IsKeyDown = function(_, key) return key == codes.W end,
 }
 local humanoid = {Health = 100, WalkSpeed = 16, FloorMaterial = "Ground"}
-local root = {Position = vec(5, 10, 5), CFrame = vec(5, 10, 5)}
+local root = {Position = vec(5, 10, 5), CFrame = vec(5, 10, 5), IsA = function(_, name) return name == "BasePart" end}
 local equipped
 local character = {
 	ChildAdded = event(), ChildRemoved = event(),
@@ -441,7 +441,7 @@ root.Position, root.CFrame, humanoid.FloorMaterial = vec(0, -495, 0), vec(0, -49
 run.Heartbeat:fire(0.1)
 assert(root.CFrame.X == 5 and root.CFrame.Y == 10)
 assert(root.AssemblyLinearVelocity.Magnitude == 0)
-local replacementRoot = {Position = vec(0, -495, 0), CFrame = vec(0, -495, 0)}
+local replacementRoot = {Position = vec(0, -495, 0), CFrame = vec(0, -495, 0), IsA = function(_, name) return name == "BasePart" end}
 local replacementCharacter = {
 	FindFirstChildOfClass = character.FindFirstChildOfClass,
 	FindFirstChild = function(_, name) if name == "HumanoidRootPart" then return replacementRoot end end,
@@ -553,11 +553,48 @@ whitelistInput.Text = ""
 whitelistInput.FocusLost:fire()
 run.RenderStepped:fire()
 assert(box.Visible)
-targetsInput.Text = "invalid name"
+targetsInput.Text = "invalid\1name"
 targetsInput.FocusLost:fire()
 assert(targetsInput.Text == " somebody, TARGET " and filterStatus.Text ~= "")
 run.RenderStepped:fire()
 assert(box.Visible)
+target.DisplayName = "Scarlet Star"
+targetsInput.Text = " scarlet star "
+targetsInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(box.Visible and not otherBox.Visible, "Display names should match independently of case")
+target.Team = "Blue"
+run.RenderStepped:fire()
+assert(not box.Visible, "ESP team check must still apply to targeted display names")
+target.Team = "Red"
+targetHumanoid.Health = 0
+run.RenderStepped:fire()
+assert(not box.Visible, "ESP should hide characters whose humanoid is dead")
+targetHumanoid.Health = 100
+whitelistInput.Text = "target"
+whitelistInput.FocusLost:fire()
+run.RenderStepped:fire()
+assert(not box.Visible, "Hidden usernames must override display-name targets")
+whitelistInput.Text = ""
+whitelistInput.FocusLost:fire()
+local oldFind, oldHumanoid, oldBounds = targetCharacter.FindFirstChild, targetCharacter.FindFirstChildOfClass, targetCharacter.GetBoundingBox
+targetCharacter.FindFirstChild = function() end
+targetCharacter.FindFirstChildOfClass = function() end
+targetCharacter.FindFirstChildWhichIsA = function(_, class) if class == "BasePart" then return head end end
+run.RenderStepped:fire()
+assert(box.Visible, "ESP should support a character without Head or Humanoid")
+targetCharacter.GetBoundingBox = function()
+	return {PointToWorldSpace = function(_, p) return vec(20 + p.X, 100 + p.Y, p.Z) end}, vec(2, 4, 2)
+end
+run.RenderStepped:fire()
+assert(box.Visible, "ESP should remain visible when part of the box is behind the camera")
+targetCharacter.GetBoundingBox = function()
+	return {PointToWorldSpace = function(_, p) return vec(20 + p.X, 100 + p.Y, -20 + p.Z) end}, vec(2, 4, 2)
+end
+run.RenderStepped:fire()
+assert(not box.Visible, "ESP should hide a box entirely behind the camera")
+targetCharacter.FindFirstChild, targetCharacter.FindFirstChildOfClass, targetCharacter.GetBoundingBox = oldFind, oldHumanoid, oldBounds
+target.DisplayName = nil
 targetsInput.Text = ""
 targetsInput.FocusLost:fire()
 run.RenderStepped:fire()
@@ -710,7 +747,7 @@ local configName = find("TextBox", "ConfigName")
 prediction.Text = "0.37"
 prediction.FocusLost:fire()
 local targetsInput = find("TextBox", "ESPTargetsInput")
-targetsInput.Text = "Target,Example"
+targetsInput.Text = "Target,Scarlet Star"
 targetsInput.FocusLost:fire()
 click("[ ] Speed")
 click("Save config")
@@ -743,7 +780,7 @@ assert(saved.profiles.Default and saved.profiles.Second)
 click("Refresh list")
 click("Default")
 click("Load config")
-assert(prediction.Text == "0.37" and targetsInput.Text == "Target,Example")
+assert(prediction.Text == "0.37" and targetsInput.Text == "Target,Scarlet Star")
 assert(find("TextButton", "Speed key: F"))
 run.Heartbeat:fire(0.1)
 assert(humanoid.WalkSpeed == 200)

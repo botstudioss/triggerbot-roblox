@@ -49,7 +49,7 @@ local function aimPosition(targetPart)
 	return targetPart.Position
 end
 
-local function isVisible(targetPart, camera)
+local function isVisible(targetPart, camera, targetCharacter)
 	local direction = targetPart.Position - camera.CFrame.Position
 	if direction.Magnitude == 0 then return true end
 
@@ -58,7 +58,7 @@ local function isVisible(targetPart, camera)
 	params.FilterDescendantsInstances = {player.Character}
 
 	local hit = workspace:Raycast(camera.CFrame.Position, direction, params)
-	return not hit or hit.Instance:IsDescendantOf(targetPart.Parent)
+	return not hit or hit.Instance:IsDescendantOf(targetCharacter or targetPart.Parent)
 end
 
 local function getTargetPart(targetPlayer, partName, checkTeam)
@@ -1334,9 +1334,10 @@ do
 		espFilterStatus.Text = ""
 	end)
 	makeToggle(espFilters, 126, "ESP named only", false, function(value) espNamedOnly = value end)
-	local function nameList(name, label, labelY, inputY, changed)
+	local function nameList(name, label, labelY, inputY, changed, allowDisplayNames)
 		makeLabel(espFilters, label, labelY)
-		local input = filterInput(name, inputY, "Usernames, separated by commas")
+		local input = filterInput(name, inputY, allowDisplayNames and "Usernames or display names, comma-separated"
+			or "Usernames, separated by commas")
 		local previous = ""
 		local function parse(value)
 			if type(value) ~= "string" then return nil end
@@ -1344,7 +1345,8 @@ do
 			for entry in (value .. ","):gmatch("(.-),") do
 				local username = entry:match("^%s*(.-)%s*$")
 				if username ~= "" then
-					if #username > 20 or not username:match("^[%w_]+$") then
+					if (allowDisplayNames and (#username > 80 or username:find("[%c]")))
+						or (not allowDisplayNames and (#username > 20 or not username:match("^[%w_]+$"))) then
 						return nil
 					end
 					names[username:lower()] = true
@@ -1361,7 +1363,7 @@ do
 			local names = parse(input.Text)
 			if not names then
 				input.Text = previous
-				espFilterStatus.Text = "Use comma-separated usernames."
+				espFilterStatus.Text = allowDisplayNames and "Use comma-separated player names." or "Use comma-separated usernames."
 				return
 			end
 			previous = input.Text
@@ -1369,7 +1371,7 @@ do
 			espFilterStatus.Text = ""
 		end)
 	end
-	nameList("ESPTargetsInput", "Target usernames", 158, 183, function(names) espTargets = names end)
+	nameList("ESPTargetsInput", "Target player names", 158, 183, function(names) espTargets = names end, true)
 	nameList("ESPWhitelistInput", "Hidden usernames", 217, 242, function(names) espWhitelist = names end)
 
 	local crosshair = Instance.new("Frame")
@@ -1673,21 +1675,34 @@ do
 			local box = overlay.box
 			overlay.tracer.Visible = false
 			local character = targetPlayer.Character
-			local targetPart = getTargetPart(targetPlayer)
+			local targetPart
+			if character and (not IGNORE_TEAMMATES or not player.Team or targetPlayer.Team ~= player.Team) then
+				local humanoid = character:FindFirstChildOfClass("Humanoid")
+				if not humanoid or humanoid.Health > 0 then
+					targetPart = character:FindFirstChild("Head")
+					if not targetPart or not targetPart:IsA("BasePart") then
+						targetPart = character:FindFirstChild("HumanoidRootPart")
+					end
+					if not targetPart or not targetPart:IsA("BasePart") then
+						targetPart = character.PrimaryPart or character:FindFirstChildWhichIsA("BasePart", true)
+					end
+				end
+			end
 			local name = targetPlayer.Name:lower()
+			local displayName = (targetPlayer.DisplayName or targetPlayer.Name):lower()
 			local localRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			local origin = localRoot and localRoot.Position or (camera and camera.CFrame.Position)
+			local origin = localRoot and localRoot:IsA("BasePart") and localRoot.Position or (camera and camera.CFrame.Position)
 			local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
-			local targetPosition = targetRoot and targetRoot.Position or (targetPart and targetPart.Position)
+			local targetPosition = targetRoot and targetRoot:IsA("BasePart") and targetRoot.Position or (targetPart and targetPart.Position)
 			local distance = origin and targetPosition and (targetPosition - origin).Magnitude
-			local allowed = not espWhitelist[name] and (not espNamedOnly or espTargets[name])
+			local allowed = not espWhitelist[name] and (not espNamedOnly or espTargets[name] or espTargets[displayName])
 				and (not espDistanceLimit or (distance and distance <= espMaxDistance))
 
 			if camera and character and character.Parent and targetPart and allowed then
 				local center, size = character:GetBoundingBox()
 				local minX, minY = math.huge, math.huge
 				local maxX, maxY = -math.huge, -math.huge
-				local inFront = true
+				local inFront = false
 
 				for x = -1, 1, 2 do
 					for y = -1, 1, 2 do
@@ -1699,9 +1714,8 @@ do
 							))
 							local point = camera:WorldToViewportPoint(corner)
 
-							if point.Z <= 0 then
-								inFront = false
-							else
+							if point.Z > 0 then
+								inFront = true
 								minX = math.min(minX, point.X)
 								minY = math.min(minY, point.Y)
 								maxX = math.max(maxX, point.X)
@@ -1719,7 +1733,7 @@ do
 					box.Position = UDim2.fromOffset(minX, minY)
 					box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
 
-					local colorName = isVisible(targetPart, camera) and "Visible" or "Hidden"
+					local colorName = isVisible(targetPart, camera, character) and "Visible" or "Hidden"
 					local color = rainbowESP and Color3.fromHSV((os.clock() % 5) / 5, 1, 1)
 						or palette[colorIndexes[colorName]].Value
 					overlay.outline.Color = color

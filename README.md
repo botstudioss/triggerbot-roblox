@@ -45,11 +45,12 @@ the menu closed. It restores the attributes it changed when disabled; an existin
 character aim-lock setting can keep the game's aim lock active independently.
 
 In **Visuals > ESP filters**, enable the distance limit and enter the maximum
-distance in studs (1–100000). Enable **ESP named only** to show only players
-listed in **Target usernames**. Enter comma-separated Roblox usernames, not
-display names; matching ignores case. **Hidden usernames** always hides those
-players from ESP, even if they are targeted. Clear a list to remove its entries.
-The existing team check still applies, and these filters affect ESP only.
+distance in studs (1–100000). Enable **ESP named only** to show players listed
+by username or display name; separate names with commas. ASCII letter matching
+ignores case, and shared display names match multiple players. **Hidden
+usernames** always hides those players, even if targeted. Clear a list to remove
+its entries. The team check still applies. ESP requires the game to replicate
+the player's character to the client and may not work in every game.
 
 The Silent Aim hook approach is adapted from
 [Averiias/Universal-SilentAim](https://github.com/Averiias/Universal-SilentAim),
