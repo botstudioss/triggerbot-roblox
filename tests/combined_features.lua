@@ -674,4 +674,87 @@ assert(shots == 4)
 players.PlayerRemoving:fire(target)
 assert(box.destroyed and find("Frame", "Tracer").destroyed)
 for index = 2, #titles do assert(titles[index] == "Camlock") end
+
+local configStatus = find("TextLabel", "ConfigStatus")
+click("Save config")
+assert(configStatus.Text:lower():find("file", 1, true))
+click("Load config")
+assert(configStatus.Text:lower():find("file", 1, true))
+local function copy(value)
+	if type(value) ~= "table" then return value end
+	local result = {}
+	for key, item in pairs(value) do result[key] = copy(item) end
+	return result
+end
+local saved, files
+files = {}
+services.HttpService = {
+	JSONEncode = function(_, value) saved = copy(value); return "valid json" end,
+	JSONDecode = function(_, value)
+		assert(value == "valid json", "bad json")
+		return copy(saved)
+	end,
+}
+writefile = function(path, value) files[path] = value end
+readfile = function(path) assert(files[path], "file missing"); return files[path] end
+local filename = paidScript and "Azure_Paid_Config.json" or "Azure_Public_Config.json"
+prediction.Text = "0.37"
+prediction.FocusLost:fire()
+local targetsInput = find("TextBox", "ESPTargetsInput")
+targetsInput.Text = "Target,Example"
+targetsInput.FocusLost:fire()
+click("[ ] Speed")
+click("Save config")
+assert(files[filename] == "valid json", "Config should be saved to the version-specific file")
+prediction.Text = "0.8"
+prediction.FocusLost:fire()
+targetsInput.Text = "Other"
+targetsInput.FocusLost:fire()
+click("[x] Speed")
+if paidScript then
+	find("TextButton", "Speed amountSlider").InputBegan:fire({UserInputType = "MouseButton1", Position = vec(55, 0)})
+	input.InputEnded:fire({UserInputType = "MouseButton1"})
+else
+	local speedInput = find("TextBox", "SpeedAmountInput")
+	speedInput.Text = "50"
+	speedInput.FocusLost:fire()
+end
+click("Speed key: F")
+press("G")
+click("Load config")
+assert(prediction.Text == "0.37" and targetsInput.Text == "Target,Example")
+assert(find("TextButton", "Speed key: F"))
+run.Heartbeat:fire(0.1)
+assert(humanoid.WalkSpeed == 200)
+press("F")
+assert(humanoid.WalkSpeed == 16)
+click("[x] Silent wall check")
+click("[x] Silent team check")
+click("Method: Mouse")
+click("Method: Raycast")
+click("[ ] Silent aim")
+click("Save config")
+click("Method: Z ZHD")
+click("[ ] Silent wall check")
+click("[ ] Silent team check")
+click("Load config")
+assert(find("TextButton", "Method: Z ZHD"))
+assert(attributes.AimLock == true, "Loading Z ZHD should restore its prerequisites before enabling it")
+click("[x] Silent aim")
+files[filename] = "invalid json"
+prediction.Text = "0.9"
+prediction.FocusLost:fire()
+click("Load config")
+assert(prediction.Text == "0.9" and configStatus.Text:lower():find("error", 1, true))
+files[filename] = "valid json"
+saved.values["camlock/prediction"] = 2
+click("Load config")
+assert(prediction.Text == "0.9" and configStatus.Text:lower():find("invalid", 1, true))
+saved.values["camlock/prediction"] = 0.37
+saved.values.keybinds.Speed = saved.values.keybinds.ESP
+click("Load config")
+assert(prediction.Text == "0.9" and find("TextButton", "Speed key: F"))
+writefile = function() error("disk full") end
+click("Save config")
+assert(configStatus.Text:lower():find("error", 1, true))
 print("Combined feature checks passed")

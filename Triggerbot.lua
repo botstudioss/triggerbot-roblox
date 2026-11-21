@@ -444,11 +444,9 @@ do
 	separator.ZIndex = 11
 	separator.Parent = menu
 
-	local pages = {}
-	local pageContents = {}
-	local tabs = {}
+	local pageContents = {tabs = {}}
 
-	for index, name in ipairs({"Aimbot", "Player", "Visuals", "Aim modes"}) do
+	for index, name in ipairs({"Aimbot", "Player", "Visuals", "Aim modes", "Config"}) do
 		local page = Instance.new("Frame")
 		page.Name = name .. "Page"
 		page.Position = UDim2.fromOffset(8, 53)
@@ -457,7 +455,6 @@ do
 		page.Visible = name == "Aimbot"
 		page.ZIndex = 11
 		page.Parent = menu
-		pages[name] = page
 		local content = Instance.new("ScrollingFrame")
 		content.Size = UDim2.new(1, 0, 1, 0)
 		content.BackgroundTransparency = 1
@@ -482,13 +479,13 @@ do
 		tab.TextColor3 = name == "Aimbot" and theme.text or theme.muted
 		tab.ZIndex = 11
 		tab.Parent = menu
-		tabs[name] = tab
+		pageContents.tabs[name] = tab
 
 		tab.MouseButton1Click:Connect(function()
-			for pageName, otherPage in pairs(pages) do
-				otherPage.Visible = pageName == name
-				tabs[pageName].TextColor3 = pageName == name and theme.text or theme.muted
-				tabs[pageName].BackgroundColor3 = pageName == name and theme.active or theme.background
+			for pageName, otherTab in pairs(pageContents.tabs) do
+				pageContents[pageName].Parent.Visible = pageName == name
+				otherTab.TextColor3 = pageName == name and theme.text or theme.muted
+				otherTab.BackgroundColor3 = pageName == name and theme.active or theme.background
 			end
 		end)
 	end
@@ -499,6 +496,7 @@ do
 
 	local function makeSection(page, name, x, height, y)
 		local section = Instance.new("Frame")
+		section.Name = "Section:" .. name
 		section.Position = UDim2.fromOffset(x, y or 0)
 		section.Size = UDim2.fromOffset(236, compact(height))
 		section.BackgroundColor3 = theme.surface
@@ -571,6 +569,125 @@ do
 		return button
 	end
 
+	local config = (function()
+		local registry, entries = {}, {}
+		local api = {}
+		local section = makeSection(pageContents.Config, "Config", 0, 245)
+		local status = makeLabel(section, "Save/load settings on this device.", 110, 125)
+		status.Name = "ConfigStatus"
+		local filename = "Azure_Public_Config.json"
+
+		local function finite(value, seen)
+			if type(value) == "number" then return value == value and value ~= math.huge and value ~= -math.huge end
+			if type(value) ~= "table" then return true end
+			seen = seen or {}
+			if seen[value] then return false end
+			seen[value] = true
+			for key, item in pairs(value) do
+				if not finite(key, seen) or not finite(item, seen) then return false end
+			end
+			seen[value] = nil
+			return true
+		end
+		local function valid(entry, value)
+			return finite(value) and entry.validate(value) == true
+		end
+		function api.number(minimum, maximum)
+			return function(value)
+				return type(value) == "number" and finite(value) and value >= minimum and value <= maximum
+			end
+		end
+		function api.choice(list)
+			return function(value)
+				if not finite(value) then return false end
+				for _, item in ipairs(list) do
+					if value == item then return true end
+				end
+				return false
+			end
+		end
+		function api.register(id, get, set, validate, phase)
+			assert(type(id) == "string" and id ~= "" and not registry[id], "Invalid or duplicate config id: " .. tostring(id))
+			assert(type(get) == "function" and type(set) == "function" and type(validate) == "function", "Invalid config callbacks: " .. id)
+			if phase == nil then phase = 1 end
+			assert(type(phase) == "number" and finite(phase), "Invalid config phase: " .. id)
+			local entry = {id = id, get = get, set = set, validate = validate, phase = phase, order = #entries + 1}
+			registry[id] = entry
+			table.insert(entries, entry)
+		end
+		local function report(ok, message)
+			status.Text = message
+			status.TextColor3 = ok and theme.muted or Color3.fromRGB(255, 115, 115)
+		end
+		local function save()
+			assert(type(writefile) == "function", "writefile is unavailable.")
+			local values = {}
+			for _, entry in ipairs(entries) do
+				local value = entry.get()
+				assert(valid(entry, value), "Invalid current value: " .. entry.id)
+				values[entry.id] = value
+			end
+			local json = game:GetService("HttpService"):JSONEncode({version = 1, values = values})
+			local result = writefile(filename, json)
+			assert(result ~= false, "writefile returned false.")
+		end
+		local function load()
+			assert(type(readfile) == "function", "readfile is unavailable.")
+			local data = game:GetService("HttpService"):JSONDecode(readfile(filename))
+			assert(type(data) == "table" and data.version == 1 and type(data.values) == "table", "Invalid config format or version.")
+			for id, value in pairs(data.values) do
+				local entry = registry[id]
+				assert(entry and valid(entry, value), "Invalid or unknown setting: " .. tostring(id))
+			end
+			local silent = registry["toggle/Section:Silent aim/Silent aim"]
+			local silentValue = silent.get()
+			local desiredSilent = data.values[silent.id]
+			if desiredSilent == nil then desiredSilent = silentValue end
+			local ordered = {}
+			for _, entry in ipairs(entries) do
+				if entry ~= silent and data.values[entry.id] ~= nil then table.insert(ordered, entry) end
+			end
+			table.sort(ordered, function(a, b)
+				if a.phase ~= b.phase then return a.phase < b.phase end
+				return a.order < b.order
+			end)
+			local function apply(entry, value)
+				local ok, result, detail = pcall(entry.set, value)
+				if not ok or result == false then
+					return false, entry.id .. ": " .. tostring(ok and (detail or "rejected") or result)
+				end
+				return true
+			end
+			if silentValue then
+				local ok, err = apply(silent, false)
+				assert(ok, "Could not disable " .. tostring(err) .. " (settings may have partially applied).")
+			end
+			for _, entry in ipairs(ordered) do
+				local ok, err = apply(entry, data.values[entry.id])
+				if not ok then
+					local restored, restoreErr = apply(silent, desiredSilent)
+					error("Could not apply " .. err .. "; load partially applied."
+						.. (restored and "" or (" Silent aim restore failed: " .. restoreErr)))
+				end
+			end
+			local ok, err = apply(silent, desiredSilent)
+			assert(ok, "Could not apply " .. tostring(err) .. "; load partially applied.")
+		end
+		local saveButton = makeButton(section, 35)
+		saveButton.Name, saveButton.Text = "ConfigSave", "Save config"
+		saveButton.MouseButton1Click:Connect(function()
+			local ok, err = pcall(save)
+			report(ok, ok and ("Saved " .. filename) or ("Save error: " .. tostring(err)))
+		end)
+		local loadButton = makeButton(section, 70)
+		loadButton.Name, loadButton.Text = "ConfigLoad", "Load config"
+		loadButton.MouseButton1Click:Connect(function()
+			local ok, err = pcall(load)
+			report(ok, ok and ("Loaded " .. filename) or ("Load error: " .. tostring(err)))
+		end)
+		return api
+	end)()
+
 	local function makeToggle(parent, y, name, initial, changed)
 		local value = initial
 		local button = makeButton(parent, y, nil, nil, true)
@@ -600,6 +717,14 @@ do
 			label.TextColor3 = theme.text
 			indicator.BackgroundColor3 = value and theme.accent or theme.control
 		end
+		config.register("toggle/" .. parent.Name .. "/" .. name, function() return value end, function(newValue)
+			if newValue == value then return true end
+			if changed(newValue) == false then return false end
+			value = newValue
+			refresh()
+			return true
+		end, function(newValue) return type(newValue) == "boolean" end,
+			name == "Silent aim" and parent.Name == "Section:Silent aim" and 3 or 2)
 		button.MouseButton1Click:Connect(function()
 			value = not value
 			if changed(value) == false then value = not value end
@@ -642,6 +767,28 @@ do
 		end)
 	end
 	refreshKeyButtons()
+	config.register("keybinds", function()
+		local values = {}
+		for name, key in pairs(keys) do values[name] = key.Name end
+		return values
+	end, function(values)
+		for name, value in pairs(values) do keys[name] = Enum.KeyCode[value] end
+		waitingForKey = nil
+		aim.active = false
+		refreshKeyButtons()
+	end, function(values)
+		if type(values) ~= "table" then return false end
+		local seen = {}
+		for name in pairs(keys) do
+			local value = values[name]
+			if type(value) ~= "string" or value == "Unknown" or value == "Escape" or seen[value] then return false end
+			local ok, key = pcall(function() return Enum.KeyCode[value] end)
+			if not ok or not key then return false end
+			seen[value] = true
+		end
+		for name in pairs(values) do if not keys[name] then return false end end
+		return true
+	end)
 
 	for _, name in ipairs({"Visible", "Hidden", "FOV"}) do
 		local section = name == "FOV" and fovColors or espColors
@@ -653,6 +800,10 @@ do
 		end
 
 		refreshColorButton()
+		config.register("color/" .. name, function() return colorIndexes[name] end, function(value)
+			colorIndexes[name] = value
+			refreshColorButton()
+		end, config.choice({1, 2, 3, 4, 5}))
 		button.MouseButton1Click:Connect(function()
 			colorIndexes[name] = colorIndexes[name] % #palette + 1
 			refreshColorButton()
@@ -665,6 +816,10 @@ do
 		radiusLabel.Text = "FOV radius: " .. fovRadius
 	end
 	updateRadius()
+	config.register("camlock/radius", function() return fovRadius end, function(value)
+		fovRadius = value
+		updateRadius()
+	end, config.number(25, 1000))
 
 	local decrease = makeButton(fovSection, 66, 104, 8)
 	decrease.Text = "-"
@@ -729,6 +884,10 @@ do
 		predictionInput.Text = tostring(predictionTime)
 	end
 	updatePrediction()
+	config.register("camlock/prediction", function() return predictionTime end, function(value)
+		predictionTime = value
+		updatePrediction()
+	end, config.number(0, 1))
 	predictionInput.FocusLost:Connect(function()
 		local value = tonumber(predictionInput.Text)
 		if not value or value ~= value or value < 0 or value > 1 then
@@ -798,6 +957,10 @@ do
 	local aimMode = makeButton(aimSection, 99)
 	local function refreshAimMode() aimMode.Text = "Mode: " .. (aim.hold and "Hold" or "Toggle") end
 	refreshAimMode()
+	config.register("aim/hold", function() return aim.hold end, function(value)
+		aim.hold, aim.active = value, false
+		refreshAimMode()
+	end, function(value) return type(value) == "boolean" end)
 	aimMode.MouseButton1Click:Connect(function()
 		aim.hold = not aim.hold
 		aim.active = false
@@ -810,6 +973,10 @@ do
 	local aimPartButton = makeButton(aimSection, 259)
 	local function refreshAimPart() aimPartButton.Text = "Target: " .. aim.part end
 	refreshAimPart()
+	config.register("aim/part", function() return aim.part end, function(value)
+		aim.part = value
+		refreshAimPart()
+	end, config.choice({"Head", "HumanoidRootPart"}))
 	aimPartButton.MouseButton1Click:Connect(function()
 		aim.part = aim.part == "Head" and "HumanoidRootPart" or "Head"
 		refreshAimPart()
@@ -817,6 +984,10 @@ do
 	local aimRadius = makeLabel(aimSection, "", 291)
 	local function refreshAimRadius() aimRadius.Text = "Aimbot FOV: " .. aim.radius end
 	refreshAimRadius()
+	config.register("aim/radius", function() return aim.radius end, function(value)
+		aim.radius = value
+		refreshAimRadius()
+	end, config.number(25, 1000))
 	local aimMinus = makeButton(aimSection, 323, 104, 8)
 	aimMinus.Name, aimMinus.Text = "AimbotFOVDecrease", "-"
 	aimMinus.MouseButton1Click:Connect(function() aim.radius = math.max(25, aim.radius - 25); refreshAimRadius() end)
@@ -826,6 +997,10 @@ do
 	local smoothButton = makeButton(aimSection, 355)
 	local function refreshSmooth() smoothButton.Text = string.format("Smoothing: %.2f", aim.smoothing) end
 	refreshSmooth()
+	config.register("aim/smoothing", function() return aim.smoothing end, function(value)
+		aim.smoothing = value
+		refreshSmooth()
+	end, config.number(0.1, 1))
 	smoothButton.MouseButton1Click:Connect(function()
 		aim.smoothing = aim.smoothing >= 1 and 0.1 or math.min(1, aim.smoothing + 0.15)
 		refreshSmooth()
@@ -860,6 +1035,16 @@ do
 	local methodButton = makeButton(silentSection, 67)
 	local function refreshMethod() methodButton.Text = "Method: " .. silent.method end
 	refreshMethod()
+	config.register("silent/method", function() return silent.method end, function(value)
+		if silent.enabled then
+			local ok, err = startSilent(value)
+			if not ok then silentError(err); return false end
+			if silent.method == "Z ZHD" then stopGameAim() end
+		end
+		silent.method = value
+		refreshSilentStatus()
+		refreshMethod()
+	end, config.choice({"Mouse", "Raycast", "Z ZHD"}))
 	methodButton.MouseButton1Click:Connect(function()
 		local method = silent.method == "Mouse" and "Raycast"
 			or silent.method == "Raycast" and "Z ZHD" or "Mouse"
@@ -897,6 +1082,11 @@ do
 	local silentPartButton = makeButton(silentSection, 227)
 	local function refreshSilentPart() silentPartButton.Text = "Target: " .. silent.part end
 	refreshSilentPart()
+	config.register("silent/part", function() return silent.part end, function(value)
+		silent.part, silent.target = value, nil
+		updateGameAim()
+		refreshSilentPart()
+	end, config.choice({"Head", "HumanoidRootPart"}))
 	silentPartButton.MouseButton1Click:Connect(function()
 		silent.part = silent.part == "Head" and "HumanoidRootPart" or "Head"
 		silent.target = nil
@@ -906,6 +1096,11 @@ do
 	local silentRadius = makeLabel(silentSection, "", 259)
 	local function refreshSilentRadius() silentRadius.Text = "Silent FOV: " .. silent.radius end
 	refreshSilentRadius()
+	config.register("silent/radius", function() return silent.radius end, function(value)
+		silent.radius = value
+		updateGameAim()
+		refreshSilentRadius()
+	end, config.number(25, 1000))
 	local silentMinus = makeButton(silentSection, 291, 104, 8)
 	silentMinus.Name, silentMinus.Text = "SilentFOVDecrease", "-"
 	silentMinus.MouseButton1Click:Connect(function()
@@ -954,6 +1149,12 @@ do
 	speedInput.ZIndex = 14
 	speedInput.Parent = visibilitySection
 	decorate(speedInput, 0, theme.border)
+	config.register("movement/speed", function() return speedAmount end, function(value)
+		speedAmount = value
+		speedInput.Text = tostring(value)
+		speedLabel.Text = "Speed amount (0-200)"
+		speedLabel.TextColor3 = theme.muted
+	end, config.number(0, 200))
 	speedInput.FocusLost:Connect(function()
 		local value = tonumber(speedInput.Text)
 		if not value or value ~= value or value < 0 or value > 200 then
@@ -1020,6 +1221,11 @@ do
 	makeLabel(espFilters, "Max distance (studs)", 67)
 	local espDistanceInput = filterInput("ESPDistanceInput", 92, "1-100000")
 	espDistanceInput.Text = tostring(espMaxDistance)
+	config.register("esp/distance", function() return espMaxDistance end, function(value)
+		espMaxDistance = value
+		espDistanceInput.Text = tostring(value)
+		espFilterStatus.Text = ""
+	end, config.number(1, 100000))
 	espDistanceInput.FocusLost:Connect(function()
 		local value = tonumber(espDistanceInput.Text)
 		if not value or value ~= value or value < 1 or value > 100000 then
@@ -1036,18 +1242,31 @@ do
 		makeLabel(espFilters, label, labelY)
 		local input = filterInput(name, inputY, "Usernames, separated by commas")
 		local previous = ""
-		input.FocusLost:Connect(function()
+		local function parse(value)
+			if type(value) ~= "string" then return nil end
 			local names = {}
-			for entry in (input.Text .. ","):gmatch("(.-),") do
+			for entry in (value .. ","):gmatch("(.-),") do
 				local username = entry:match("^%s*(.-)%s*$")
 				if username ~= "" then
 					if #username > 20 or not username:match("^[%w_]+$") then
-						input.Text = previous
-						espFilterStatus.Text = "Use comma-separated usernames."
-						return
+						return nil
 					end
 					names[username:lower()] = true
 				end
+			end
+			return names
+		end
+		config.register("esp/" .. name, function() return previous end, function(value)
+			previous, input.Text = value, value
+			changed(parse(value))
+			espFilterStatus.Text = ""
+		end, function(value) return parse(value) ~= nil end)
+		input.FocusLost:Connect(function()
+			local names = parse(input.Text)
+			if not names then
+				input.Text = previous
+				espFilterStatus.Text = "Use comma-separated usernames."
+				return
 			end
 			previous = input.Text
 			changed(names)

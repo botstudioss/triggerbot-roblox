@@ -10,6 +10,12 @@ In **Player > Movement**, set speed from 0 to 200 studs per second and toggle
 it with G by default. The speed key can be rebound in the same section. Games
 may override or reject client-side speed changes.
 
+Use the **Config** tab to save and load settings on the current device. The
+executor must provide `writefile` and `readfile`; errors are shown in the menu.
+The files are `Azure_Public_Config.json` and `Azure_Paid_Config.json` in the
+executor's file workspace. Loading may partially apply settings if a feature
+cannot be enabled in the current game or executor.
+
 The **Aim modes** tab adds a separate camera aimbot and experimental Silent Aim.
 Both have independent FOV radii, circles, limits, target parts, team checks and
 wall checks. The camera aimbot uses E by default, supports hold or toggle mode,
