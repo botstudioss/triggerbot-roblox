@@ -142,6 +142,7 @@ RunService:BindToRenderStep("Camlock", Enum.RenderPriority.Camera.Value + 1, fun
 end)
 
 local mouseHookInstalled, rayHookInstalled = false, false
+local rawMouseMetatable, rawRayMetatable
 local function silentTarget()
 	if not silent.enabled or menuOpen then return nil end
 	local character = player.Character
@@ -151,11 +152,23 @@ local function silentTarget()
 end
 
 local function installSilentHook(method)
-	if type(hookmetamethod) ~= "function" then return false, "Missing: hookmetamethod" end
-	if type(newcclosure) ~= "function" then return false, "Missing: newcclosure" end
-	if type(checkcaller) ~= "function" then return false, "Missing: checkcaller" end
+	if type(hookmetamethod) ~= "function" and type(getrawmetatable) ~= "function" then
+		return false, "Missing: hookmetamethod"
+	end
 	if method == "Raycast" and type(getnamecallmethod) ~= "function" then
 		return false, "Missing: getnamecallmethod"
+	end
+	if type(hookmetamethod) == "function" and type(newcclosure) ~= "function"
+		and (type(getrawmetatable) ~= "function" or type(setreadonly) ~= "function") then
+		return false, "Missing: newcclosure"
+	end
+	if type(hookmetamethod) == "function" and type(checkcaller) ~= "function"
+		and (type(getrawmetatable) ~= "function" or type(setreadonly) ~= "function") then
+		return false, "Missing: checkcaller"
+	end
+	if type(hookmetamethod) ~= "function" and type(getrawmetatable) == "function"
+		and type(setreadonly) ~= "function" then
+		return false, "Missing: setreadonly"
 	end
 	if (method == "Mouse" and mouseHookInstalled) or (method == "Raycast" and rayHookInstalled) then
 		return true
@@ -163,8 +176,9 @@ local function installSilentHook(method)
 	local old
 	local ok, err = pcall(function()
 		if method == "Mouse" then
-			old = hookmetamethod(game, "__index", newcclosure(function(object, key)
-				if object == mouse and not checkcaller() and silent.method == "Mouse" and (key == "Hit" or key == "Target") then
+			local function indexHook(object, key)
+				local external = type(checkcaller) ~= "function" or not checkcaller()
+				if object == mouse and external and silent.method == "Mouse" and (key == "Hit" or key == "Target") then
 					local part = silentTarget()
 					if part then
 						if key == "Target" then return part end
@@ -172,11 +186,26 @@ local function installSilentHook(method)
 					end
 				end
 				return old(object, key)
-			end))
+			end
+			if type(hookmetamethod) == "function" and type(newcclosure) == "function" then
+				old = hookmetamethod(game, "__index", newcclosure(indexHook))
+			elseif type(getrawmetatable) == "function" and type(setreadonly) == "function" then
+				if type(setreadonly) ~= "function" then error("Missing: setreadonly") end
+				rawMouseMetatable = getrawmetatable(game)
+				setreadonly(rawMouseMetatable, false)
+				old = rawMouseMetatable.__index
+				rawMouseMetatable.__index = newcclosure and newcclosure(indexHook) or indexHook
+				setreadonly(rawMouseMetatable, true)
+			elseif type(hookmetamethod) == "function" then
+				error("Missing: newcclosure")
+			else
+				error("Missing: setreadonly")
+			end
 			mouseHookInstalled = true
 		else
-			old = hookmetamethod(game, "__namecall", newcclosure(function(object, ...)
-				if object == workspace and not checkcaller() and silent.method == "Raycast" and getnamecallmethod() == "Raycast" then
+			local function namecallHook(object, ...)
+				local external = type(checkcaller) ~= "function" or not checkcaller()
+				if object == workspace and external and silent.method == "Raycast" and getnamecallmethod() == "Raycast" then
 					local part = silentTarget()
 					if part then
 						local args = table.pack(...)
@@ -190,7 +219,20 @@ local function installSilentHook(method)
 					end
 				end
 				return old(object, ...)
-			end))
+			end
+			if type(hookmetamethod) == "function" and type(newcclosure) == "function" then
+				old = hookmetamethod(game, "__namecall", newcclosure(namecallHook))
+			elseif type(getrawmetatable) == "function" and type(setreadonly) == "function" then
+				rawRayMetatable = getrawmetatable(game)
+				setreadonly(rawRayMetatable, false)
+				old = rawRayMetatable.__namecall
+				rawRayMetatable.__namecall = newcclosure and newcclosure(namecallHook) or namecallHook
+				setreadonly(rawRayMetatable, true)
+			elseif type(hookmetamethod) == "function" then
+				error("Missing: newcclosure")
+			else
+				error("Missing: setreadonly")
+			end
 			rayHookInstalled = true
 		end
 	end)
