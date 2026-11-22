@@ -10,6 +10,12 @@ In **Player > Movement**, set speed from 0 to 200 studs per second and toggle
 it with G by default. The speed key can be rebound in the same section. Games
 may override or reject client-side speed changes.
 
+In the free version's **Aimbot > Camlock player selection**, select one or more
+players and enable **Selected players only**. Camlock chooses the closest
+eligible selected player to the cursor, subject to its FOV, wall and team
+checks. An empty selection locks nobody. This does not filter other aim modes;
+selections are saved with configs and remain selected if a player rejoins.
+
 In the **Config** tab, click the name field, enter a name and save, or select a
 saved config on the right and click Load. Saving an existing name replaces it.
 **Export JSON** saves the selected config as `Azure_Public_Export_<name>.json`

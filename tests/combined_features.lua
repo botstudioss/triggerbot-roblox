@@ -315,6 +315,62 @@ press("T")
 assert(find("TextLabel", "That key is already in use.") and #messages == 1)
 press("Escape")
 assert(find("TextLabel", "Click a key to rebind. Escape cancels."))
+if not paidScript then
+	local selectedSection = find("TextLabel", "Camlock player selection").Parent
+	assert(selectedSection.Position[2] + selectedSection.Size[2] <= selectedSection.Parent.CanvasSize[2])
+	local rivalHead = {Position = vec(5, 0, 10), AssemblyLinearVelocity = vec(0, 0, 0),
+		IsA = function(_, name) return name == "BasePart" end}
+	local rivalCharacter = {
+		FindFirstChildOfClass = function(_, name) if name == "Humanoid" then return targetHumanoid end end,
+		FindFirstChild = function(_, name) if name == "Head" then return rivalHead end end,
+	}
+	rivalHead.Parent = rivalCharacter
+	local rival = {Name = "Rival", Team = "Red", Parent = players, Character = rivalCharacter}
+	local newcomer = {Name = "Newcomer", Team = "Red", Parent = players, Character = rivalCharacter}
+	local current = {player, target, rival}
+	function players:GetPlayers() return current end
+	players.PlayerAdded:fire(rival)
+	blocked = false
+	click("[ ] Selected players only")
+	press("Q")
+	assert(messages[#messages] == "No eligible player in FOV", "Empty player selection must not lock randomly")
+	click("[ ] Aimbot")
+	camera.CFrame.target = nil
+	press("E")
+	run.render()
+	assert(camera.CFrame.target == rivalHead.Position, "Camlock selection must not filter the camera aimbot")
+	press("E")
+	click("[x] Aimbot")
+	find("TextButton", "CamlockPlayer:Target").MouseButton1Click:fire()
+	press("Q")
+	assert(messages[#messages] == "Locked onto Target", "Selected target must take priority over a closer unselected player")
+	find("TextButton", "CamlockPlayer:Target").MouseButton1Click:fire()
+	press("Q")
+	assert(messages[#messages] == "No eligible player in FOV", "Deselecting the locked player must unlock")
+	find("TextButton", "CamlockPlayer:Target").MouseButton1Click:fire()
+	find("TextButton", "CamlockPlayer:Rival").MouseButton1Click:fire()
+	press("Q")
+	assert(messages[#messages] == "Locked onto Rival", "Closest selected player should be chosen")
+	press("Q")
+	rival.Team = "Blue"
+	press("Q")
+	assert(messages[#messages] == "Locked onto Target", "Team check must still apply")
+	press("Q")
+	rival.Team = "Red"
+	table.insert(current, newcomer)
+	players.PlayerAdded:fire(newcomer)
+	assert(find("TextButton", "CamlockPlayer:Newcomer"))
+	players.PlayerRemoving:fire(newcomer)
+	table.remove(current, #current)
+	assert(not pcall(find, "TextButton", "CamlockPlayer:Newcomer"))
+	click("[x] Selected players only")
+	press("Q")
+	assert(messages[#messages] == "Locked onto Rival", "Disabling selection should restore normal targeting")
+	press("Q")
+	function players:GetPlayers() return {player, target} end
+	players.PlayerRemoving:fire(rival)
+	blocked = true
+end
 press("Q")
 assert(messages[#messages] == "No eligible player in FOV" and titles[#titles] == "Camlock")
 click("[x] Wall check")
@@ -761,13 +817,24 @@ local targetsInput = find("TextBox", "ESPTargetsInput")
 targetsInput.Text = "Target,Scarlet Star"
 targetsInput.FocusLost:fire()
 click("[ ] Speed")
+if not paidScript then click("[ ] Selected players only") end
 click("Save config")
 assert(files[filename] and saved.profiles.Default, "Config should be saved to the version-specific file")
+if not paidScript then
+	assert(saved.profiles.Default.values["camlock/selectedPlayers"].target
+		and saved.profiles.Default.values["camlock/selectedPlayers"].rival)
+	click("[x] Selected players only")
+	players.PlayerAdded:fire(target)
+	find("TextButton", "CamlockPlayer:Target").MouseButton1Click:fire()
+end
 documents.legacy = copy(saved.profiles.Default)
 files[filename] = "legacy"
 click("Refresh list")
 click("Default")
 click("Load config")
+if not paidScript then
+	assert(find("TextButton", "CamlockPlayer:Target").Text == "[x] Target", "Loading must restore selected players")
+end
 click("Save config")
 assert(saved.version == 2 and saved.profiles.Default, "Legacy config should migrate without losing its settings")
 prediction.Text = "0.8"
@@ -820,6 +887,10 @@ click("Default")
 click("Load config")
 assert(prediction.Text == "0.37" and targetsInput.Text == "Target,Scarlet Star")
 assert(find("TextButton", "Speed key: F"))
+if not paidScript then
+	click("[x] Selected players only")
+	click("[ ] Selected players only")
+end
 run.Heartbeat:fire(0.1)
 assert(humanoid.WalkSpeed == 200)
 press("F")

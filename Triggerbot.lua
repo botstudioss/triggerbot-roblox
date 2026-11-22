@@ -39,6 +39,7 @@ local mouseDown = false
 local lastTarget
 
 local lockedPlayer
+local camlockTargets = {enabled = false, names = {}}
 local aim = {enabled = false, active = false, hold = true, radius = 150, limit = true, wall = true, team = true, part = "Head", smoothing = 0.25}
 local silent = {enabled = false, radius = 150, limit = true, wall = true, team = true, part = "Head", method = "Mouse", target = nil}
 
@@ -92,7 +93,7 @@ local function getClosestPlayer(settings)
 
 	for _, targetPlayer in ipairs(Players:GetPlayers()) do
 		local targetPart = getTargetPart(targetPlayer, settings and settings.part, settings and settings.team)
-		if targetPart then
+		if targetPart and (settings or not camlockTargets.enabled or camlockTargets.names[targetPlayer.Name:lower()]) then
 			local screenPosition, onScreen = camera:WorldToScreenPoint(targetPart.Position)
 			if onScreen and screenPosition.Z > 0 then
 				local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - mousePosition).Magnitude
@@ -459,7 +460,7 @@ do
 		content.Size = UDim2.new(1, 0, 1, 0)
 		content.BackgroundTransparency = 1
 		content.BorderSizePixel = 0
-		content.CanvasSize = UDim2.fromOffset(0, name == "Visuals" and 485 or 358)
+		content.CanvasSize = UDim2.fromOffset(0, name == "Visuals" and 485 or name == "Aimbot" and 455 or 358)
 		content.ScrollBarThickness = 4
 		content.ScrollBarImageColor3 = theme.border
 		content.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -912,6 +913,80 @@ do
 			notify("Camlock", "Unlocked from " .. lockedPlayer.Name)
 			lockedPlayer = nil
 		end
+	end
+
+	do
+		local section = makeSection(pageContents.Aimbot, "Camlock player selection", 0, 260, 256)
+		makeToggle(section, 32, "Selected players only", false, function(value)
+			camlockTargets.enabled = value
+			if value and lockedPlayer and not camlockTargets.names[lockedPlayer.Name:lower()] then
+				unlock()
+			end
+		end)
+		makeLabel(section, "Select players below. Empty list locks nobody.", 63, 42)
+		local list = Instance.new("ScrollingFrame")
+		list.Name = "CamlockPlayerList"
+		list.Position = UDim2.fromOffset(8, compact(105))
+		list.Size = UDim2.new(1, -16, 1, -compact(112))
+		list.BackgroundTransparency = 1
+		list.BorderSizePixel = 0
+		list.ScrollBarThickness = 4
+		list.ScrollBarImageColor3 = theme.border
+		list.ScrollingDirection = Enum.ScrollingDirection.Y
+		list.ZIndex = 14
+		list.Parent = section
+		local buttons = {}
+		local function refresh(excluded, added)
+			for _, button in ipairs(buttons) do button:Destroy() end
+			buttons = {}
+			local current, included = {}, {}
+			for _, other in ipairs(Players:GetPlayers()) do
+				if other ~= player and other ~= excluded then
+					table.insert(current, other)
+					included[other] = true
+				end
+			end
+			if added and added ~= player and not included[added] then table.insert(current, added) end
+			table.sort(current, function(a, b) return a.Name:lower() < b.Name:lower() end)
+			for index, other in ipairs(current) do
+				local name = other.Name:lower()
+				local button = makeButton(list, (index - 1) * 32, 205, 0)
+				button.Name = "CamlockPlayer:" .. other.Name
+				button.Text = (camlockTargets.names[name] and "[x] " or "[ ] ") .. other.Name
+				button.BackgroundColor3 = camlockTargets.names[name] and theme.active or theme.control
+				button.MouseButton1Click:Connect(function()
+					camlockTargets.names[name] = not camlockTargets.names[name] or nil
+					if camlockTargets.enabled and lockedPlayer == other and not camlockTargets.names[name] then
+						unlock()
+					end
+					refresh()
+				end)
+				table.insert(buttons, button)
+			end
+			list.CanvasSize = UDim2.fromOffset(0, #current * 24)
+		end
+		config.register("camlock/selectedPlayers", function()
+			local names = {}
+			for name in pairs(camlockTargets.names) do names[name] = true end
+			return names
+		end, function(names)
+			camlockTargets.names = {}
+			for name in pairs(names) do camlockTargets.names[name] = true end
+			if camlockTargets.enabled and lockedPlayer and not camlockTargets.names[lockedPlayer.Name:lower()] then
+				unlock()
+			end
+			refresh()
+		end, function(names)
+			if type(names) ~= "table" then return false end
+			for name, selected in pairs(names) do
+				if type(name) ~= "string" or #name > 20 or #name < 1
+					or not name:match("^[%w_]+$") or name ~= name:lower() or selected ~= true then return false end
+			end
+			return true
+		end)
+		Players.PlayerAdded:Connect(function(other) refresh(nil, other) end)
+		Players.PlayerRemoving:Connect(function(other) refresh(other) end)
+		refresh()
 	end
 
 	local function refreshKeyButtons()
