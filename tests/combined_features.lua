@@ -864,7 +864,7 @@ services.HttpService = {
 }
 writefile = function(path, value) files[path] = value end
 readfile = function(path) assert(files[path], "file missing"); return files[path] end
-isfile = function(path) return files[path] ~= nil end
+isfile = function(path) return files[path] ~= nil or nil end
 local filename = paidScript and "xwav_Paid_Config.json" or "xwav_Public_Config.json"
 local configName = find("TextBox", "ConfigName")
 configName.Text = "Unsaved"
@@ -881,6 +881,15 @@ if not paidScript then click("[ ] Infinite jump") end
 if not paidScript then click("[ ] Selected players only") end
 click("Save config")
 assert(files[filename] and saved.profiles.Default, "Config should be saved to the version-specific file")
+files["Azure_Public_Config.json"] = files[filename]
+files[filename] = nil
+click("Refresh list")
+click("Default")
+click("Load config")
+assert(prediction.Text == "0.37", "Legacy Azure config files should still load")
+click("Save config")
+assert(files[filename] and saved.profiles.Default, "Saving should write the xwav config file")
+files["Azure_Public_Config.json"] = nil
 if not paidScript then
 	assert(saved.profiles.Default.values.keybinds.InfiniteJump == "K")
 	assert(saved.profiles.Default.values["toggle/Section:Movement keybinds/Infinite jump"])

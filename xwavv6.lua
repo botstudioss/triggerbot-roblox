@@ -788,13 +788,42 @@ do
 			assert(validName(name), "Name must be 1-32 letters, numbers, spaces, underscores or hyphens.")
 			return name
 		end
+		local function executorFn(name)
+			local value = _G[name]
+			if type(value) == "function" then return value end
+			if type(getgenv) == "function" then
+				local ok, env = pcall(getgenv)
+				if ok and type(env) == "table" and type(env[name]) == "function" then
+					return env[name]
+				end
+			end
+			return nil
+		end
+		local function hasFile(path)
+			local isfileFn, readFn = executorFn("isfile"), executorFn("readfile")
+			if not isfileFn and not readFn then
+				error("isfile is unavailable.")
+			end
+			if isfileFn then
+				local ok, result = pcall(isfileFn, path)
+				if ok then return result and true or false end
+			end
+			if readFn then
+				return pcall(readFn, path)
+			end
+			return false
+		end
 		local function readProfiles()
-			assert(type(isfile) == "function", "isfile is unavailable.")
-			local exists = isfile(filename)
-			assert(type(exists) == "boolean", "isfile returned an invalid result.")
-			if not exists then return {} end
-			assert(type(readfile) == "function", "readfile is unavailable.")
-			local data = game:GetService("HttpService"):JSONDecode(readfile(filename))
+			local read = executorFn("readfile")
+			local data
+			for _, path in ipairs({filename, "Azure_Attached_Config.json"}) do
+				if hasFile(path) then
+					assert(read, "readfile is unavailable.")
+					data = game:GetService("HttpService"):JSONDecode(read(path))
+					break
+				end
+			end
+			if not data then return {} end
 			assert(type(data) == "table", "Invalid config file.")
 			if data.version == 1 and type(data.values) == "table" then return {["Saved Default"] = data} end
 			assert(data.version == 2 and type(data.profiles) == "table", "Invalid config file or version.")
@@ -831,9 +860,10 @@ do
 			end
 		end
 		local function writeProfiles(profiles)
-			assert(type(writefile) == "function", "writefile is unavailable.")
+			local write = executorFn("writefile")
+			assert(write, "writefile is unavailable.")
 			local json = game:GetService("HttpService"):JSONEncode({version = 2, profiles = profiles})
-			assert(writefile(filename, json) ~= false, "writefile returned false.")
+			assert(write(filename, json) ~= false, "writefile returned false.")
 		end
 		local function renderProfiles(profiles)
 			for _, button in ipairs(listButtons) do button:Destroy() end
@@ -856,7 +886,7 @@ do
 			list.CanvasSize = UDim2.fromOffset(0, #names * 24)
 		end
 		local function save()
-			assert(type(writefile) == "function", "writefile is unavailable.")
+			assert(executorFn("writefile"), "writefile is unavailable.")
 			local name = selectedName()
 			assert(name:lower() ~= "default", "Default is blank; choose a different name to save.")
 			local profiles = readProfiles()
@@ -919,7 +949,8 @@ do
 			return name
 		end
 		local function exportConfig()
-			assert(type(writefile) == "function", "writefile is unavailable.")
+			local write = executorFn("writefile")
+			assert(write, "writefile is unavailable.")
 			local name = selectedName()
 			local data = name == "Default" and defaultProfile() or readProfiles()[name]
 			assert(data, "Save this config before exporting it.")
@@ -928,23 +959,22 @@ do
 			local path
 			for index = 1, 10000 do
 				local candidate = base .. (index == 1 and "" or ("-" .. index)) .. ".json"
-				local exists = isfile(candidate)
-				assert(type(exists) == "boolean", "isfile returned an invalid result.")
-				if not exists then path = candidate; break end
+				if not hasFile(candidate) then path = candidate; break end
 			end
 			assert(path, "Too many exports with this name.")
 			local json = game:GetService("HttpService"):JSONEncode(data)
-			assert(writefile(path, json) ~= false, "writefile returned false.")
+			assert(write(path, json) ~= false, "writefile returned false.")
 			fileInput.Text = path
 			return path
 		end
 		local function importConfig()
-			assert(type(readfile) == "function", "readfile is unavailable.")
+			local read = executorFn("readfile")
+			assert(read, "readfile is unavailable.")
 			local name = selectedName()
 			assert(name:lower() ~= "default", "Default is blank; choose a different name to import.")
 			local path = fileInput.Text:match("^%s*(.-)%s*$")
 			assert(#path <= 128 and path:match("^[%w_ %-]+%.json$"), "Enter a JSON filename from the workspace.")
-			local data = game:GetService("HttpService"):JSONDecode(readfile(path))
+			local data = game:GetService("HttpService"):JSONDecode(read(path))
 			validateProfile(data)
 			local profiles = readProfiles()
 			profiles[name] = data
@@ -987,11 +1017,9 @@ do
 		function api.startAutosave()
 			local path = "xwav_Attached_Autosave.json"
 			local ok, exists = pcall(function()
-				assert(type(isfile) == "function" and type(readfile) == "function" and type(writefile) == "function",
+				assert(executorFn("isfile") and executorFn("readfile") and executorFn("writefile"),
 					"Autosave needs isfile, readfile and writefile.")
-				local result = isfile(path)
-				assert(type(result) == "boolean", "isfile returned an invalid result.")
-				return result
+				return hasFile(path)
 			end)
 			if not ok then
 				report(false, "Autosave unavailable: " .. tostring(exists))
@@ -1000,7 +1028,7 @@ do
 			end
 			if exists then
 				local loaded, err = pcall(function()
-					local data = game:GetService("HttpService"):JSONDecode(readfile(path))
+					local data = game:GetService("HttpService"):JSONDecode(executorFn("readfile")(path))
 					applyProfile(data)
 				end)
 				if not loaded then
@@ -1036,7 +1064,7 @@ do
 					end
 					if not previous or not equal(values, previous) then
 						local json = game:GetService("HttpService"):JSONEncode({version = 1, values = values})
-						assert(writefile(path, json) ~= false, "writefile returned false.")
+						assert(executorFn("writefile")(path, json) ~= false, "writefile returned false.")
 					end
 					return copy(values)
 				end)

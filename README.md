@@ -31,6 +31,8 @@ script edition. Use Refresh list to reload the saved names. The executor must
 provide `isfile`, `writefile` and `readfile`; errors are shown in the menu.
 The files are `xwav_Public_Config.json` and `xwav_Paid_Config.json` in the
 executor's file workspace. Existing single configs appear as `Default`.
+Save and load still work if `isfile` returns nil for missing files, and older
+Azure config files are read when the xwav file is not present.
 Loading may partially apply settings if a feature
 cannot be enabled in the current game or executor.
 
