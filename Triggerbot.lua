@@ -385,7 +385,7 @@ do
 	title.Size = UDim2.new(1, 0, 0, 24)
 	title.BackgroundTransparency = 1
 	title.BorderSizePixel = 0
-	title.Text = "Azure | discord.gg/azuremodded"
+	title.Text = "xwav | discord.gg/xwav"
 	title.Font = Enum.Font.Code
 	title.TextSize = 12
 	title.TextXAlignment = Enum.TextXAlignment.Left
@@ -583,7 +583,7 @@ do
 		local savedSection = makeSection(pageContents.Config, "Saved configs", 248, 420)
 		local status = makeLabel(section, "Enter a name and save, or select a config.", 310, 95)
 		status.Name = "ConfigStatus"
-		local filename = "Azure_Public_Config.json"
+		local filename = "xwav_Public_Config.json"
 		makeLabel(section, "Config name (click to edit)", 30, 20)
 		local nameInput = Instance.new("TextBox")
 		nameInput.Name = "ConfigName"
@@ -795,7 +795,7 @@ do
 			local data = readProfiles()[name]
 			assert(data, "Save this config before exporting it.")
 			validateProfile(data)
-			local base = "Azure_Public_Export_" .. name
+			local base = "xwav_Public_Export_" .. name
 			local path
 			for index = 1, 10000 do
 				local candidate = base .. (index == 1 and "" or ("-" .. index)) .. ".json"
@@ -1600,7 +1600,7 @@ do
 		end
 	end)
 	local colorCorrection = Instance.new("ColorCorrectionEffect")
-	colorCorrection.Name = "AzureColorCorrection"
+	colorCorrection.Name = "xwavColorCorrection"
 	colorCorrection.Enabled = false
 	colorCorrection.Saturation = 0.2
 	colorCorrection.Contrast = 0.1
@@ -1647,7 +1647,7 @@ do
 	stopStatsDrag = makeDraggable(targetStats, targetStats, function() return menuOpen end)
 	targetStats.Active = false
 	local targetHighlight = Instance.new("Highlight")
-	targetHighlight.Name = "AzureTargetHighlight"
+	targetHighlight.Name = "xwavTargetHighlight"
 	targetHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 	targetHighlight.FillColor = theme.accent
 	targetHighlight.OutlineColor = theme.text
@@ -2003,7 +2003,7 @@ end
 
 StarterGui:SetCore("SendNotification", {
 	Title = "Notification",
-	Text = "made by /azuremodded",
+	Text = "made by /xwav",
 	Duration = 5
 })
 
