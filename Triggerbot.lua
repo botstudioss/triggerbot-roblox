@@ -288,6 +288,7 @@ do
 	local showTracers, rainbowESP = false, false
 	local showTargetDot, showTargetTracer, showTargetHighlight, showTargetStats = false, false, false, false
 	local speedEnabled, autoJump, antiVoid, flightEnabled = false, false, false, false
+	local movement = {infiniteJump = false, actions = {}}
 	local speedAmount = 24
 	local savedHumanoid, savedWalkSpeed, safeCFrame, safeCharacter
 	local cameraFovEnabled, savedCamera, savedCameraFov = false, nil, nil
@@ -297,6 +298,10 @@ do
 		Camlock = Enum.KeyCode.Q,
 		ESP = Enum.KeyCode.T,
 		Speed = Enum.KeyCode.G,
+		Flight = Enum.KeyCode.Unknown,
+		AutoJump = Enum.KeyCode.Unknown,
+		InfiniteJump = Enum.KeyCode.Unknown,
+		AntiVoid = Enum.KeyCode.Unknown,
 		Menu = Enum.KeyCode.RightShift
 	}
 	local waitingForKey
@@ -533,6 +538,7 @@ do
 	local fovSection = makeSection(pageContents.Aimbot, "Camera Aimbot", 248, 476)
 	local teamSection = makeSection(pageContents.Player, "Player", 0, 185)
 	local visibilitySection = makeSection(pageContents.Player, "Movement", 248, 255)
+	local movementKeys = makeSection(pageContents.Player, "Movement keybinds", 0, 205, 150)
 	local espColors = makeSection(pageContents.Visuals, "ESP colors", 0, 300)
 	local espFilters = makeSection(pageContents.Visuals, "ESP filters", 0, 325, 233)
 	local fovColors = makeSection(pageContents.Visuals, "Visual effects", 248, 262)
@@ -991,7 +997,8 @@ do
 
 	local function refreshKeyButtons()
 		for name, button in pairs(keyButtons) do
-			button.Text = name .. " key: " .. (waitingForKey == name and "Press a key..." or keys[name].Name)
+			button.Text = name .. " key: " .. (waitingForKey == name and "Press a key..."
+				or keys[name] == Enum.KeyCode.Unknown and "Unbound" or keys[name].Name)
 		end
 	end
 
@@ -1013,6 +1020,9 @@ do
 		for name, key in pairs(keys) do values[name] = key.Name end
 		return values
 	end, function(values)
+		for _, name in ipairs({"Flight", "AutoJump", "InfiniteJump", "AntiVoid"}) do
+			keys[name] = Enum.KeyCode[values[name] or "Unknown"]
+		end
 		for name, value in pairs(values) do keys[name] = Enum.KeyCode[value] end
 		waitingForKey = nil
 		aim.active = false
@@ -1022,10 +1032,13 @@ do
 		local seen = {}
 		for name in pairs(keys) do
 			local value = values[name]
-			if type(value) ~= "string" or value == "Unknown" or value == "Escape" or seen[value] then return false end
+			local optional = name == "Flight" or name == "AutoJump" or name == "InfiniteJump" or name == "AntiVoid"
+			if value == nil and optional then value = "Unknown" end
+			if type(value) ~= "string" or (value == "Unknown" and not optional)
+				or value == "Escape" or (value ~= "Unknown" and seen[value]) then return false end
 			local ok, key = pcall(function() return Enum.KeyCode[value] end)
 			if not ok or not key then return false end
-			seen[value] = true
+			if value ~= "Unknown" then seen[value] = true end
 		end
 		for name in pairs(values) do if not keys[name] then return false end end
 		return true
@@ -1369,12 +1382,39 @@ do
 		end
 	end
 	local setSpeedToggle = makeToggle(visibilitySection, 35, "Speed", false, setSpeed)
-	makeToggle(visibilitySection, 67, "Auto jump", false, function(value) autoJump = value end)
-	makeToggle(visibilitySection, 99, "Anti void", false, function(value)
+	local setAutoJumpToggle = makeToggle(visibilitySection, 67, "Auto jump", false, function(value) autoJump = value end)
+	local setAntiVoidToggle = makeToggle(visibilitySection, 99, "Anti void", false, function(value)
 		antiVoid = value
 		safeCFrame, safeCharacter = nil, nil
 	end)
-	makeToggle(visibilitySection, 131, "Flight (WASD, Space, Ctrl)", false, function(value) flightEnabled = value end)
+	local setFlightToggle = makeToggle(visibilitySection, 131, "Flight (WASD, Space, Ctrl)", false, function(value) flightEnabled = value end)
+	local setInfiniteJumpToggle = makeToggle(movementKeys, 35, "Infinite jump", false, function(value) movement.infiniteJump = value end)
+	movement.actions.AutoJump = function() autoJump = not autoJump; setAutoJumpToggle(autoJump) end
+	movement.actions.AntiVoid = function()
+		antiVoid = not antiVoid
+		safeCFrame, safeCharacter = nil, nil
+		setAntiVoidToggle(antiVoid)
+	end
+	movement.actions.Flight = function() flightEnabled = not flightEnabled; setFlightToggle(flightEnabled) end
+	movement.actions.InfiniteJump = function()
+		movement.infiniteJump = not movement.infiniteJump
+		setInfiniteJumpToggle(movement.infiniteJump)
+	end
+	for index, name in ipairs({"Flight", "AutoJump", "InfiniteJump", "AntiVoid"}) do
+		local button = makeButton(movementKeys, 35 + index * 32)
+		keyButtons[name] = button
+		button.MouseButton1Click:Connect(function()
+			waitingForKey = name
+			keyHint.Text = "Click a key to rebind. Escape cancels."
+			keyHint.TextColor3 = theme.muted
+			refreshKeyButtons()
+		end)
+	end
+	UserInputService.JumpRequest:Connect(function()
+		if not movement.infiniteJump or flightEnabled or menuOpen or UserInputService:GetFocusedTextBox() then return end
+		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health > 0 then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+	end)
 	local speedLabel = makeLabel(visibilitySection, "Speed amount (0-200)", 158)
 	local speedInput = Instance.new("TextBox")
 	speedInput.Name = "SpeedAmountInput"
@@ -1712,6 +1752,8 @@ do
 				if duplicate then
 					keyHint.Text = "That key is already in use."
 					keyHint.TextColor3 = Color3.fromRGB(255, 115, 115)
+					keyButtons[waitingForKey].Text = "That key is already in use."
+					return
 				else
 					keys[waitingForKey] = key
 					if waitingForKey == "Aim" then aim.active = false end
@@ -1763,6 +1805,10 @@ do
 			if not enabled then
 				hideOverlays()
 			end
+		elseif not menuOpen and not gameProcessed and key ~= Enum.KeyCode.Unknown then
+			for name, toggle in pairs(movement.actions) do
+				if key == keys[name] then toggle(); break end
+			end
 		end
 	end)
 
@@ -1772,7 +1818,8 @@ do
 		end
 	end)
 
-	RunService.RenderStepped:Connect(function()
+	local espElapsed = 1 / 30
+	RunService.RenderStepped:Connect(function(deltaTime)
 		updateGameAim()
 		local mousePosition = UserInputService:GetMouseLocation()
 		circle.Position = UDim2.fromOffset(mousePosition.X, mousePosition.Y)
@@ -1815,6 +1862,9 @@ do
 		end
 
 		if not enabled then return end
+		espElapsed = espElapsed + (deltaTime or 0)
+		if espElapsed < 1 / 30 then return end
+		espElapsed = 0
 
 		for targetPlayer, overlay in pairs(overlays) do
 			local box = overlay.box

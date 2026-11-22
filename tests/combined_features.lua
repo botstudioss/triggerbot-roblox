@@ -1,8 +1,12 @@
-local function event()
+local function event(default)
 	local callbacks = {}
 	return {
 		Connect = function(_, callback) table.insert(callbacks, callback) end,
-		fire = function(_, ...) for _, callback in ipairs(callbacks) do callback(...) end end,
+		fire = function(_, ...)
+			for _, callback in ipairs(callbacks) do
+				if select("#", ...) == 0 and default then callback(default) else callback(...) end
+			end
+		end,
 	}
 end
 
@@ -28,7 +32,7 @@ table.find = table.find or function(values, value)
 	for index, item in ipairs(values) do if item == value then return index end end
 end
 local codes = {}
-for _, key in ipairs({"Q", "T", "E", "F", "G", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
+for _, key in ipairs({"Q", "T", "E", "F", "G", "H", "J", "K", "L", "RightShift", "Escape", "Unknown", "LeftControl", "RightControl", "W", "S", "A", "D", "Space"}) do
 	codes[key] = {Name = key}
 end
 Enum = {
@@ -38,7 +42,7 @@ Enum = {
 	ScrollingDirection = {Y = 1}, HighlightDepthMode = {AlwaysOnTop = 1}, Material = {Air = "Air"},
 	ContextActionResult = {Pass = "Pass", Sink = "Sink"},
 	UserInputState = {Begin = "Begin", End = "End"},
-	HumanoidStateType = {Physics = "Physics", Dead = "Dead", FallingDown = "FallingDown"},
+	HumanoidStateType = {Physics = "Physics", Dead = "Dead", FallingDown = "FallingDown", Jumping = "Jumping"},
 	ApplyStrokeMode = {Border = 1},
 }
 RaycastParams = {new = function() return {} end}
@@ -70,11 +74,12 @@ local function click(name)
 	button.MouseButton1Click:fire()
 end
 local input = {
-	InputBegan = event(), InputEnded = event(), InputChanged = event(),
+	InputBegan = event(), InputEnded = event(), InputChanged = event(), JumpRequest = event(),
 	GetFocusedTextBox = function() end, GetMouseLocation = function() return vec(0, 0) end,
 	IsKeyDown = function(_, key) return key == codes.W end,
 }
-local humanoid = {Health = 100, WalkSpeed = 16, FloorMaterial = "Ground"}
+local humanoid = {Health = 100, WalkSpeed = 16, FloorMaterial = "Ground",
+	ChangeState = function(self, state) self.State = state end}
 local root = {Position = vec(5, 10, 5), CFrame = vec(5, 10, 5), IsA = function(_, name) return name == "BasePart" end}
 local equipped
 local character = {
@@ -100,18 +105,20 @@ local players = {LocalPlayer = player, PlayerAdded = event(), PlayerRemoving = e
 local head = {Position = vec(20, 0, 10), AssemblyLinearVelocity = vec(10, 0, 0), IsA = function(_, name) return name == "BasePart" end}
 head.CFrame = vec(20, 0, 10)
 local targetHumanoid = {Health = 100}
+local boundingCalls = 0
 local targetCharacter = {
 	Parent = true,
 	FindFirstChildOfClass = function(_, name) if name == "Humanoid" then return targetHumanoid end end,
 	FindFirstChild = function(_, name) if name == "Head" or name == "HumanoidRootPart" then return head end end,
 	GetBoundingBox = function()
+		boundingCalls = boundingCalls + 1
 		return {PointToWorldSpace = function(_, p) return vec(20 + p.X, 100 + p.Y, 10 + p.Z) end}, vec(2, 4, 2)
 	end,
 }
 head.Parent = targetCharacter
 local target = {Name = "Target", Team = "Red", Parent = players, Character = targetCharacter}
 function players:GetPlayers() return {player, target} end
-local run = {RenderStepped = event(), Heartbeat = event()}
+local run = {RenderStepped = event(1 / 30), Heartbeat = event()}
 function run:BindToRenderStep(_, _, callback) self.render = callback end
 local messages, titles = {}, {}
 local blockClick
@@ -546,6 +553,52 @@ run.Heartbeat:fire(0.1)
 assert(root.CFrame.Z == 15)
 click("[x] Flight (WASD, Space, Ctrl)")
 
+if not paidScript then
+	for name, key in pairs({Flight = "H", AutoJump = "J", InfiniteJump = "K", AntiVoid = "L"}) do
+		click(name .. " key: Unbound")
+		press("Q")
+		assert(find("TextButton", "That key is already in use."))
+		press(key)
+		assert(find("TextButton", name .. " key: " .. key))
+	end
+	press("K")
+	input.JumpRequest:fire()
+	assert(humanoid.State == nil, "Jump must not activate with the menu open")
+	press("RightShift")
+	input.InputBegan:fire({UserInputType = "Keyboard", KeyCode = codes.K}, true)
+	input.JumpRequest:fire()
+	assert(humanoid.State == nil, "Processed key must not activate infinite jump")
+	press("K")
+	input.GetFocusedTextBox = function() return {} end
+	input.JumpRequest:fire()
+	assert(humanoid.State == nil, "Jump must not activate while typing")
+	input.GetFocusedTextBox = function() end
+	humanoid.Health = 0
+	input.JumpRequest:fire()
+	assert(humanoid.State == nil, "Jump must not activate while dead")
+	humanoid.Health = 100
+	input.JumpRequest:fire()
+	assert(humanoid.State == "Jumping")
+	humanoid.State = nil
+	press("H")
+	input.JumpRequest:fire()
+	assert(humanoid.State == nil, "Flight takes priority over infinite jump")
+	press("H")
+	press("K")
+	input.JumpRequest:fire()
+	assert(humanoid.State == nil)
+	press("J")
+	humanoid.Jump, humanoid.FloorMaterial = false, "Ground"
+	run.Heartbeat:fire(0.1)
+	assert(not humanoid.Jump)
+	press("J")
+	run.Heartbeat:fire(0.1)
+	assert(humanoid.Jump)
+	press("L")
+	click("[x] Anti void")
+	press("RightShift")
+end
+
 press("T")
 click("[x] FOV circle")
 assert(not circle.Visible)
@@ -568,6 +621,13 @@ for _, object in ipairs(objects) do
 end
 assert(box.Visible and not outline.Enabled and not username.Visible and not distance.Visible)
 assert(find("Frame", "Tracer").Visible)
+if not paidScript then
+	local previousBoundingCalls = boundingCalls
+	for _ = 1, 3 do run.RenderStepped:fire(1 / 120) end
+	assert(boundingCalls == previousBoundingCalls, "ESP should not recompute every high-FPS frame")
+	run.RenderStepped:fire(1 / 120)
+	assert(boundingCalls > previousBoundingCalls, "ESP should update at 30 Hz")
+end
 
 local filterSection = find("TextLabel", "ESP filters").Parent
 assert(filterSection.Position[2] + filterSection.Size[2] <= filterSection.Parent.CanvasSize[2])
@@ -817,10 +877,19 @@ local targetsInput = find("TextBox", "ESPTargetsInput")
 targetsInput.Text = "Target,Scarlet Star"
 targetsInput.FocusLost:fire()
 click("[ ] Speed")
+if not paidScript then click("[ ] Infinite jump") end
 if not paidScript then click("[ ] Selected players only") end
 click("Save config")
 assert(files[filename] and saved.profiles.Default, "Config should be saved to the version-specific file")
 if not paidScript then
+	assert(saved.profiles.Default.values.keybinds.InfiniteJump == "K")
+	assert(saved.profiles.Default.values["toggle/Section:Movement keybinds/Infinite jump"])
+	click("[x] Infinite jump")
+	click("InfiniteJump key: K")
+	press("G")
+	click("Load config")
+	assert(find("TextButton", "InfiniteJump key: K"))
+	click("[x] Infinite jump")
 	assert(saved.profiles.Default.values["camlock/selectedPlayers"].target
 		and saved.profiles.Default.values["camlock/selectedPlayers"].rival)
 	click("[x] Selected players only")
@@ -828,11 +897,18 @@ if not paidScript then
 	find("TextButton", "CamlockPlayer:Target").MouseButton1Click:fire()
 end
 documents.legacy = copy(saved.profiles.Default)
+if not paidScript then
+	for _, name in ipairs({"Flight", "AutoJump", "InfiniteJump", "AntiVoid"}) do
+		documents.legacy.values.keybinds[name] = nil
+	end
+	documents.legacy.values["toggle/Section:Movement keybinds/Infinite jump"] = nil
+end
 files[filename] = "legacy"
 click("Refresh list")
 click("Default")
 click("Load config")
 if not paidScript then
+	assert(find("TextButton", "InfiniteJump key: Unbound"), "Old configs should leave new keys unbound")
 	assert(find("TextButton", "CamlockPlayer:Target").Text == "[x] Target", "Loading must restore selected players")
 end
 click("Save config")
@@ -873,6 +949,15 @@ files["Invalid.json"] = "invalidProfile"
 fileInput.Text = "Invalid.json"
 click("Import JSON")
 assert(files[filename] == previousCollection and configStatus.Text:lower():find("invalid", 1, true))
+if not paidScript then
+	local duplicateKeys = copy(documents[files[filename]].profiles.Second.values.keybinds)
+	duplicateKeys.Flight = duplicateKeys.Speed
+	documents.duplicateKeys = {version = 1, values = {keybinds = duplicateKeys}}
+	files["Duplicate.json"] = "duplicateKeys"
+	fileInput.Text = "Duplicate.json"
+	click("Import JSON")
+	assert(files[filename] == previousCollection and configStatus.Text:lower():find("invalid", 1, true))
+end
 fileInput.Text = "Missing.json"
 click("Import JSON")
 assert(files[filename] == previousCollection and configStatus.Text:lower():find("error", 1, true))

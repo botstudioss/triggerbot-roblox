@@ -7,8 +7,12 @@ triggerbot. Revolver shots are limited to 200 studs and shotgun shots to 75
 studs; unsupported weapon or game behavior can still prevent firing.
 
 In **Player > Movement**, set speed from 0 to 200 studs per second and toggle
-it with G by default. The speed key can be rebound in the same section. Games
-may override or reject client-side speed changes.
+it with G by default. Rebind it in the same section; flight, auto jump, infinite
+jump and anti void have separate, initially unbound keys under **Movement
+keybinds**. Infinite jump is paused while typing, the menu is open, or flight
+is active. Games may override or reject client-side movement changes.
+ESP updates at up to 30 times per second to reduce CPU usage; performance still
+depends on the game and device.
 
 In the free version's **Aimbot > Camlock player selection**, select one or more
 players and enable **Selected players only**. Camlock chooses the closest
