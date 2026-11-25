@@ -156,8 +156,8 @@ dofile(TEST_SCRIPT or "Triggerbot.lua")
 assert(#messages == 1 and titles[1] == "Notification")
 local menuFrame = find("Frame", "Settings")
 assert(find("TextLabel", "DragHandle").Text == (paidScript
-	and "Azure Paid | @socialdw on discord | discord.gg/azuremodded"
-	or "Azure | discord.gg/azuremodded"))
+	and "xwav Paid | @socialdw on discord | discord.gg/xwav"
+	or "xwav | discord.gg/xwav"))
 local aimingPage, visualsPage = find("Frame", "AimbotPage"), find("Frame", "VisualsPage")
 find("TextButton", "VisualsTab").MouseButton1Click:fire()
 assert(visualsPage.Visible and not aimingPage.Visible)
@@ -436,7 +436,7 @@ click("[ ] Target highlight")
 click("[ ] Target stats")
 run.RenderStepped:fire()
 assert(find("Frame", "TargetDot").Visible and find("Frame", "TargetTracer").Visible)
-assert(find("Highlight", "AzureTargetHighlight").Adornee == targetCharacter)
+assert(find("Highlight", "xwavTargetHighlight").Adornee == targetCharacter)
 local stats = find("TextLabel", "TargetStats")
 assert(stats.Text:find("Target"))
 stats.AbsolutePosition, stats.AbsoluteSize = vec(20, 50), vec(220, 34)
@@ -454,7 +454,7 @@ input.InputChanged:fire({UserInputType = "MouseMovement", Position = vec(150, 15
 assert(stats.Position[1] == 90 and stats.Position[2] == 90)
 click("[x] Camlock")
 run.RenderStepped:fire()
-assert(not find("Frame", "TargetDot").Visible and not find("Highlight", "AzureTargetHighlight").Enabled)
+assert(not find("Frame", "TargetDot").Visible and not find("Highlight", "xwavTargetHighlight").Enabled)
 click("[ ] Camlock")
 target.Team = "Blue"
 press("Q")
@@ -750,9 +750,9 @@ assert(lighting.FogEnd == 100)
 click("[x] Custom fog")
 assert(lighting.FogStart == 20 and lighting.FogEnd == 1000)
 click("[ ] Color correction")
-assert(find("ColorCorrectionEffect", "AzureColorCorrection").Enabled)
+assert(find("ColorCorrectionEffect", "xwavColorCorrection").Enabled)
 click("[x] Color correction")
-assert(not find("ColorCorrectionEffect", "AzureColorCorrection").Enabled)
+assert(not find("ColorCorrectionEffect", "xwavColorCorrection").Enabled)
 click("[x] ESP")
 assert(not box.Visible and not find("Frame", "Tracer").Visible)
 
@@ -864,8 +864,8 @@ services.HttpService = {
 }
 writefile = function(path, value) files[path] = value end
 readfile = function(path) assert(files[path], "file missing"); return files[path] end
-isfile = function(path) return files[path] ~= nil end
-local filename = paidScript and "Azure_Paid_Config.json" or "Azure_Public_Config.json"
+isfile = function(path) return files[path] ~= nil or nil end
+local filename = paidScript and "xwav_Paid_Config.json" or "xwav_Public_Config.json"
 local configName = find("TextBox", "ConfigName")
 configName.Text = "Unsaved"
 click("Export JSON")
@@ -881,6 +881,15 @@ if not paidScript then click("[ ] Infinite jump") end
 if not paidScript then click("[ ] Selected players only") end
 click("Save config")
 assert(files[filename] and saved.profiles.Default, "Config should be saved to the version-specific file")
+files["Azure_Public_Config.json"] = files[filename]
+files[filename] = nil
+click("Refresh list")
+click("Default")
+click("Load config")
+assert(prediction.Text == "0.37", "Legacy Azure config files should still load")
+click("Save config")
+assert(files[filename] and saved.profiles.Default, "Saving should write the xwav config file")
+files["Azure_Public_Config.json"] = nil
 if not paidScript then
 	assert(saved.profiles.Default.values.keybinds.InfiniteJump == "K")
 	assert(saved.profiles.Default.values["toggle/Section:Movement keybinds/Infinite jump"])
@@ -933,7 +942,7 @@ click("Save config")
 assert(saved.profiles.Default and saved.profiles.Second)
 click("Export JSON")
 local fileInput = find("TextBox", "ConfigFile")
-local exportPath = (paidScript and "Azure_Paid_Export_" or "Azure_Public_Export_") .. "Second.json"
+local exportPath = (paidScript and "xwav_Paid_Export_" or "xwav_Public_Export_") .. "Second.json"
 assert(fileInput.Text == exportPath and files[exportPath])
 local firstExport = files[exportPath]
 click("Export JSON")

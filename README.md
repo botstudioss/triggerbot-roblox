@@ -22,15 +22,17 @@ selections are saved with configs and remain selected if a player rejoins.
 
 In the **Config** tab, click the name field, enter a name and save, or select a
 saved config on the right and click Load. Saving an existing name replaces it.
-**Export JSON** saves the selected config as `Azure_Public_Export_<name>.json`
-or `Azure_Paid_Export_<name>.json` in the executor workspace; repeated exports
+**Export JSON** saves the selected config as `xwav_Public_Export_<name>.json`
+or `xwav_Paid_Export_<name>.json` in the executor workspace; repeated exports
 get numbered filenames. To import, put a JSON file in
 that workspace, enter its filename and a config name, and click **Import JSON**;
 an existing config with that name is replaced. Import files from the same
 script edition. Use Refresh list to reload the saved names. The executor must
 provide `isfile`, `writefile` and `readfile`; errors are shown in the menu.
-The files are `Azure_Public_Config.json` and `Azure_Paid_Config.json` in the
+The files are `xwav_Public_Config.json` and `xwav_Paid_Config.json` in the
 executor's file workspace. Existing single configs appear as `Default`.
+Save and load still work if `isfile` returns nil for missing files, and older
+Azure config files are read when the xwav file is not present.
 Loading may partially apply settings if a feature
 cannot be enabled in the current game or executor.
 
